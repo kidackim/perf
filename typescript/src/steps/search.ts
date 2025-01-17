@@ -1,13 +1,20 @@
 import { exec } from "@gatling.io/core";
-import { http, jsonPath } from "@gatling.io/http";
+import { http, jmesPath } from "@gatling.io/http";
 
-export const verifyJsonResponse = exec(
-  http("Verify JSON Response")
-    .get("/computers") // Twój endpoint API
+export const verifyFullResponse = exec(
+  http("Verify Full JSON Response")
+    .get("/your-endpoint") // Podmień na swój endpoint
     .check(
-      jsonPath("$.property1").is("value1"), // Sprawdź, czy `property1` ma wartość "value1"
-      jsonPath("$.property2").exists(),     // Sprawdź, czy `property2` istnieje
-      jsonPath("$.property3").ofType("NUMBER"), // Sprawdź, czy `property3` to liczba
-      jsonPath("$.property4").is("456")     // Sprawdź, czy `property4` ma wartość "456"
+      jmesPath("@") // Pobiera cały respons JSON
+        .transform((response) => {
+            // Dodaj swoje asercje na całym responsie
+            const isValid =
+              typeof response.property1 === "string" &&
+              typeof response.property2 === "string" &&
+              typeof response.property3 === "number" &&
+              Array.isArray(response.property4); // Przykład: sprawdź, czy property4 to tablica
+            return isValid;
+        })
+        .is(true) // Walidacja przechodzi, jeśli wszystkie warunki są spełnione
     )
 );
