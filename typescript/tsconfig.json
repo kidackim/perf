@@ -7,9 +7,10 @@
 //    "module": "node16",
 //    "moduleResolution": "node16",
     "module": "ES2020",
-    "moduleResolution": "Node",
+    "moduleResolution": "node",
 //    "esModuleInterop": true,
     "strict": true,
+    "typeRoots": ["./node_modules/@types"],
     "forceConsistentCasingInFileNames": true
   },
   "include": ["src/**/*.ts"],

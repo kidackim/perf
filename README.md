@@ -1,45 +1,68 @@
-# Gatling JS - JavaScript and TypeScript demo projects
 
-A simple showcase of JavaScript and TypeScript NPM projects using Gatling JS. Please also check out the [introduction to JavaScript scripting](https://docs.gatling.io/tutorials/scripting-intro-js/) in the Gatling documentation.
+# Gatling Performance Testing for Web Applications
 
-## Prerequisites
+A performance testing project using Gatling to simulate realistic user scenarios (`search`, `browse`, `edit`) for web applications.
 
-You need [Node.js](https://nodejs.org/en/download) v18 or later (LTS versions only) and npm v8 or later (included with Node.js).
+## Wymagania wstępne
 
-## Use demo project
+Projekt wymaga [Node.js](https://nodejs.org/en/download) w wersji co najmniej 18 (tylko wersje LTS) oraz npm w wersji co najmniej 8 (dostarczony z Node.js).
 
-Run the typeScript sample:
+## Instalacja
 
-```shell
-cd typescript
-npm install
-npx gatling run --typescript --simulation computerdatabase # automatically download Gatling runtime, build the project, and run the computerdatabase simulation
-```
-
-Or the JavaScript sample:
+1. Pobrać repozytorium projektu.
+2. Zainstalować wymagane zależności za pomocą poniższych poleceń:
 
 ```shell
-cd javascript
-npm install
-npx gatling run --simulation computerdatabase # automatically download Gatling runtime, build the project, and run the computerdatabase simulation
+cd <ścieżka-projektu>
+npm install  # Zainstaluj zależności
 ```
 
-You can also launch the [Gatling Recorder](https://docs.gatling.io/tutorials/recorder/) and use it to capture browser-based actions and help create a realistic user scenario:
+## Struktura projektu
+
+Projekt opiera się na trzech głównych krokach symulacji:
+- `search`: symulacja wyszukiwania danych w aplikacji.
+- `browse`: przeglądanie dostępnych zasobów.
+- `edit`: edytowanie elementów aplikacji.
+```
+
+## Konfiguracja
+
+Konfiguracja symulacji odbywa się w plikach projektu Gatling. Poniższe sekcje definiują:
+- Strona docelowa: **url serwera testowego**.
+- Liczba użytkowników: **np. symulacja 100 równoczesnych użytkowników**.
+- Przykład konfiguracji kroków symulacji:
+
+```typescript
+const search = scenario('Search').exec(
+  http('Search Request').get('/search?q=item')
+);
+
+const browse = scenario('Browse').exec(
+  http('Browse Request').get('/browse')
+);
+
+const edit = scenario('Edit').exec(
+  http('Edit Request').put('/edit/1')
+);
+```
+```
+
+## Uruchamianie testów
+
+Aby uruchomić testy wydajnościowe, wykonaj następujące kroki:
 
 ```shell
-npx gatling recorder
+npx gatling run --simulation search
+npx gatling run --simulation browse
+npx gatling run --simulation edit
 ```
 
-The `gatling` command-line tool has a built-in help function:
-
-```shell
-npx gatling --help # List all available commands
-npx gatling run --help # List options for the "run" command (--help also works for all other available commands)
+Po uruchomieniu testu wyniki zostaną zapisane w katalogu `results`, gdzie znajdziesz raporty z testów.
 ```
 
-## Included helper scripts
+## Autorzy
 
-Note that both sample projects include a few aliases in the `package.json`'s `scripts` section, which you can use for convenience or refer to as examples:
+Projekt został przygotowany przez Zespół Wydajności Aplikacji. W razie pytań prosimy o kontakt.
 
 ```shell
 npm run clean # Delete Gatling bundled code and generated reports
@@ -48,4 +71,7 @@ npm run check # TypeScript project only, type check but don't build or run
 npm run build # Build project but don't run
 npm run computerdatabase # Run the included computerdatabase simulation
 npm run recorder # Starts the Gatling Recorder
+## Licencja
+
+Projekt jest objęty licencją MIT. Więcej szczegółów znajdziesz w pliku `LICENSE`.
 ```
