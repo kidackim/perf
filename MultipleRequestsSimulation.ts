@@ -16,14 +16,11 @@ export default simulation((setUp) => {
           .get(endpoint)
           .check(http.status().is(200)) // Sprawdzenie statusu odpowiedzi
       )
-  );
-
-  setUp(
-    scenarios.map((s) =>
-      s.injectOpen({
+      .injectOpen({
         rampUsers: 10, // Liczba użytkowników
         during: 10,    // Czas trwania symulacji
       })
-    )
-  ).protocols(http.baseUrl(baseUrl)); // Ustawienie base URL
+  );
+
+  setUp(scenarios).protocols(http.baseUrl(baseUrl)); // Ustawienie base URL
 });
