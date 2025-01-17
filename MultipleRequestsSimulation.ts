@@ -1,21 +1,26 @@
 import { simulation, scenario, http } from "@gatling.io/core";
 
-// Pobierz zmienne środowiskowe
+// Pobieranie zmiennych środowiskowych
 const baseUrl = process.env.BASE_URL || "http://localhost:8080";
-const endpoints = (process.env.ENDPOINTS || "").split(",").filter((e) => e);
+const requestConfigs = process.env.REQUESTS
+  ? JSON.parse(process.env.REQUESTS)
+  : [];
 
-if (endpoints.length === 0) {
-  throw new Error("No endpoints provided! Set ENDPOINTS environment variable.");
+if (requestConfigs.length === 0) {
+  throw new Error("No requests provided! Set REQUESTS environment variable.");
 }
 
 export default simulation((setUp) => {
-  const scenarios = endpoints.map((endpoint) =>
-    scenario(`Performance Test for ${endpoint}`).exec(
-      http(`GET ${endpoint}`)
-        .get(endpoint)
-        .check(http.status().is(200))
+  // Tworzymy scenariusze na podstawie konfiguracji
+  const scenarios = requestConfigs.map(({ method, endpoint, body }) =>
+    scenario(`Test ${method} ${endpoint}`).exec(
+      http(`${method} ${endpoint}`)
+        [method.toLowerCase()](endpoint) // Wybieramy metodę HTTP
+        .body(body ? JSON.stringify(body) : undefined) // Dodajemy payload, jeśli istnieje
+        .asJson() // Wysyłamy jako JSON
+        .check(http.status().is(200)) // Walidacja statusu odpowiedzi
     ).injectOpen({
-      rampUsers: 10,
+      rampUsers: 10, // Liczba użytkowników
       during: 10, // Czas trwania symulacji
     })
   );
