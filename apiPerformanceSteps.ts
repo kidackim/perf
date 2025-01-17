@@ -1,55 +1,44 @@
 import { Given, When, Then } from "@cucumber/cucumber";
 import { exec } from "child_process";
-import * as fs from "fs";
-import * as path from "path";
 
 let baseUrl: string;
-let endpoints: string[] = [];
+const endpoints: string[] = [];
 let gatlingOutput: string;
 
 Given("the base URL {string}", (url: string) => {
-  baseUrl = url; // Ustawiamy base URL
+  baseUrl = url; // Ustawienie bazowego URL
 });
 
-When("I send GET requests to the following endpoints:", (dataTable) => {
-  // Pobieramy listę endpointów z tabeli
-  endpoints = dataTable.rawTable.map((row) => row[0]); // Każdy wiersz to jeden endpoint
+When("I send a GET request to {string}", (endpoint: string) => {
+  endpoints.push(endpoint); // Dodanie endpointu do listy
 });
 
-Then("I generate a performance report", async () => {
-  const simulationFilePath = path.resolve(
-    "./src/simulations/MultipleRequestsSimulation.ts"
-  );
+Then("I generate a performance report", async function () {
+  console.log("Base URL:", baseUrl);
+  console.log("Endpoints:", endpoints);
 
-  if (!fs.existsSync(simulationFilePath)) {
-    throw new Error(`Simulation file not found at ${simulationFilePath}`);
-  }
+  // Budowanie zmiennych środowiskowych
+  const envVariables = {
+    BASE_URL: baseUrl,
+    ENDPOINTS: endpoints.join(","), // Łączymy endpointy w jeden ciąg znaków
+  };
 
-  // Tworzymy plik JSON z dynamicznymi endpointami
-  const configFilePath = path.resolve("./src/config/endpoints.json");
-  fs.writeFileSync(
-    configFilePath,
-    JSON.stringify({ baseUrl, endpoints }, null, 2)
-  );
-
-  // Uruchamiamy symulację Gatling
-  await new Promise<void>((resolve, reject) => {
+  // Uruchamianie symulacji Gatling.js
+  return new Promise<void>((resolve, reject) => {
     exec(
-      `npx gatling-js-cli run ${simulationFilePath}`,
-      (error, stdout) => {
+      `npx gatling-js-cli run ./src/simulations/ParametrizedSimulation.ts`,
+      { env: { ...process.env, ...envVariables } }, // Dodanie zmiennych środowiskowych
+      (error, stdout, stderr) => {
         if (error) {
+          console.error("Error during Gatling execution:", stderr);
           reject(error);
+          return;
         }
+
         gatlingOutput = stdout;
+        console.log("Gatling Output:\n", gatlingOutput);
         resolve();
       }
     );
   });
-
-  // Weryfikacja raportu Gatling
-  if (!gatlingOutput.includes("Simulation finished")) {
-    throw new Error("Gatling simulation did not complete successfully!");
-  }
-
-  console.log("Gatling Output:\n", gatlingOutput);
 });

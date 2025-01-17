@@ -1,26 +1,24 @@
 import { simulation, scenario, http } from "@gatling.io/core";
-import * as fs from "fs";
-import * as path from "path";
 
-// Wczytujemy konfigurację endpointów z pliku JSON
-const configFilePath = path.resolve("./src/config/endpoints.json");
-const { baseUrl, endpoints }: { baseUrl: string; endpoints: string[] } = JSON.parse(
-  fs.readFileSync(configFilePath, "utf-8")
-);
+// Pobierz zmienne środowiskowe
+const baseUrl = process.env.BASE_URL || "http://localhost:8080";
+const endpoints = (process.env.ENDPOINTS || "").split(",").filter((e) => e);
+
+if (endpoints.length === 0) {
+  throw new Error("No endpoints provided! Set ENDPOINTS environment variable.");
+}
 
 export default simulation((setUp) => {
   const scenarios = endpoints.map((endpoint) =>
-    scenario(`GET Request to ${endpoint}`)
-      .exec(
-        http(`GET ${endpoint}`)
-          .get(endpoint)
-          .check(http.status().is(200)) // Sprawdzenie statusu odpowiedzi
-      )
-      .injectOpen({
-        rampUsers: 10, // Liczba użytkowników
-        during: 10,    // Czas trwania symulacji
-      })
+    scenario(`Performance Test for ${endpoint}`).exec(
+      http(`GET ${endpoint}`)
+        .get(endpoint)
+        .check(http.status().is(200))
+    ).injectOpen({
+      rampUsers: 10,
+      during: 10, // Czas trwania symulacji
+    })
   );
 
-  setUp(scenarios).protocols(http.baseUrl(baseUrl)); // Ustawienie base URL
+  setUp(scenarios).protocols(http.baseUrl(baseUrl));
 });

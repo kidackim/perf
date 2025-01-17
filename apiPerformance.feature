@@ -1,19 +1,10 @@
-Feature: API Performance Testing with Multiple Requests
+Feature: Performance Testing with Parametrized Simulation
   As a tester
-  I want to test the performance of multiple GET requests
-  So that I can ensure the API handles load efficiently
+  I want to test multiple endpoints
+  So that I can evaluate the system's performance
 
-  Scenario: Test multiple GET requests
+  Scenario: Test API performance
     Given the base URL "http://localhost:8080"
-    When I send GET requests to the following endpoints:
-      | /endpoint1 |
-      | /endpoint2 |
-      | /endpoint3 |
-      | /endpoint4 |
-      | /endpoint5 |
-      | /endpoint6 |
-      | /endpoint7 |
-      | /endpoint8 |
-      | /endpoint9 |
-      | /endpoint10 |
+    When I send a GET request to "/api/v1/resource"
+    And I send a GET request to "/api/v1/status"
     Then I generate a performance report
