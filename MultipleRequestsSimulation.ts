@@ -2,31 +2,22 @@ import fs from "fs";
 import path from "path";
 import { simulation, scenario, http } from "gatling-js";
 
-const configFilePath = path.resolve(__dirname, "gatling-request-configs.json");
+const configFilePath = path.resolve(__dirname, "gatling-config.json");
 
 // Wczytanie konfiguracji z pliku JSON
 const config = JSON.parse(fs.readFileSync(configFilePath, "utf-8"));
-const { baseUrl, requestConfigs } = config;
+const { baseUrl, endpoints } = config;
 
 export default simulation((setUp) => {
-  // Scenariusz iterujący przez wszystkie żądania w konfiguracji
-  const dynamicScenario = scenario("Dynamic Scenario")
-    .repeat(requestConfigs.length, "index") // Iteracja przez `requestConfigs`
+  // Scenariusz dla wszystkich endpointów
+  const dynamicScenario = scenario("Dynamic GET Requests")
+    .foreach(endpoints, "endpoint")
     .on(
       exec((session) => {
-        const index = session.get("index"); // Pobierz aktualny indeks
-        const { method, endpoint, body } = requestConfigs[index];
-
-        const req = http(`${method} ${endpoint}`);
-        const request =
-          method === "GET"
-            ? req.get(endpoint)
-            : req[method.toLowerCase()](endpoint)
-              .body(body ? JSON.stringify(body) : undefined)
-              .asJson();
-
-        // Wykonanie żądania z walidacją statusu
-        return request.check(http.status().is(200));
+        const endpoint = session.get("endpoint");
+        return http(`GET ${endpoint}`)
+          .get(endpoint)
+          .check(http.status().is(200));
       })
     );
 
