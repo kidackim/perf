@@ -1,31 +1,60 @@
-import fs from "fs";
-import path from "path";
-import { simulation, scenario, http } from "gatling-js";
-
-const configFilePath = path.resolve(__dirname, "gatling-config.json");
-
-// Wczytanie konfiguracji z pliku JSON
-const config = JSON.parse(fs.readFileSync(configFilePath, "utf-8"));
-const { baseUrl, endpoints } = config;
+import {
+  constantUsersPerSec,
+  scenario,
+  simulation,
+  Session,
+  ScenarioBuilder,
+  exec,
+  jsonFile,
+  group,
+  pause,
+  arrayFeeder,
+  atOnceUsers,
+  GlobalStore,
+  global
+} from "@gatling.io/core";
+import { http } from "@gatling.io/http";
 
 export default simulation((setUp) => {
-  // Scenariusz dla wszystkich endpointów
-  const dynamicScenario = scenario("Dynamic GET Requests")
-    .foreach(endpoints, "endpoint")
-    .on(
-      exec((session) => {
-        const endpoint = session.get("endpoint");
-        return http(`GET ${endpoint}`)
-          .get(endpoint)
-          .check(http.status().is(200));
-      })
+  // Konfiguracja protokołu HTTP
+  const baseHttpProtocol = http.baseUrl("https://your-api-base-url.com");
+
+  // Dynamiczne dane z pliku JSON
+  const endpointsFeeder = jsonFile("config/endpoints.json").random();
+
+  // Scenariusz
+  const scn: ScenarioBuilder = scenario("Dynamic GET Requests")
+    .feed(endpointsFeeder) // Ładowanie dynamicznych endpointów
+    .exec(
+      group("Send GET Request").on(
+        exec((session) => {
+          const endpoint = session.get<string>("endpoint");
+          console.log(`Sending GET request to: ${endpoint}`);
+          return session;
+        }),
+        http("GET Request")
+          .get("#{endpoint}")
+          .check(http.status().is(200)),
+        pause({ amount: 1, unit: "seconds" }) // Pauza między żądaniami
+      )
     );
 
-  // Stałe ustawienia symulacji
+  // Ustawienia symulacji
   setUp(
-    dynamicScenario.injectOpen({
-      rampUsers: 20, // Stała liczba użytkowników
-      during: 30,    // Stały czas trwania symulacji
-    })
-  ).protocols(http.baseUrl(baseUrl));
+    scn.injectOpen(
+      constantUsersPerSec(5).during(60) // Stały ruch użytkowników przez 60 sekund
+    ).andThen(
+      scenario("Post execution")
+        .exec((session) => {
+          console.log(`Total requests sent: ${GlobalStore.get("requestsSent")}`);
+          return session;
+        })
+        .injectOpen(atOnceUsers(1)) // Jeden użytkownik wykonuje post-processing
+    )
+  )
+    .protocols(baseHttpProtocol)
+    .assertions(
+      global().responseTime().percentile(95.0).lte(500), // Weryfikacja czasu odpowiedzi
+      global().successfulRequests().percent().gte(99.0) // Weryfikacja sukcesu żądań
+    );
 });
