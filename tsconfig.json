@@ -1,15 +1,6 @@
-{
-  "compilerOptions": {
-    "baseUrl": "./",
-    "outDir": "target",
-    "lib": ["es2021", "dom"],
-    "target": "es2021",
-    "module": "node16",
-    "moduleResolution": "node16",
-    "strict": true,
-    "typeRoots": ["./node_modules/@types"],
-    "forceConsistentCasingInFileNames": true
-  },
-  "include": ["src/**/*.ts"],
-  "exclude": ["**/*.test.ts"]
-}
+[
+  { "method": "GET", "endpoint": "/api/v1/resource1" },
+  { "method": "POST", "endpoint": "/api/v1/resource2" },
+  { "method": "PUT", "endpoint": "/api/v1/resource3" },
+  { "method": "DELETE", "endpoint": "/api/v1/resource4" }
+]
