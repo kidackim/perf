@@ -9,26 +9,32 @@ const config = JSON.parse(fs.readFileSync(configFilePath, "utf-8"));
 const { baseUrl, requestConfigs } = config;
 
 export default simulation((setUp) => {
-  const scenarios = requestConfigs.map(({ method, endpoint, body }, index) => {
-    const req = http(`${method} ${endpoint}`);
-    const request = method === "GET"
-      ? req.get(endpoint)
-      : req[method.toLowerCase()](endpoint)
-        .body(body ? JSON.stringify(body) : undefined)
-        .asJson();
+  // Scenariusz iterujący przez wszystkie żądania w konfiguracji
+  const dynamicScenario = scenario("Dynamic Scenario")
+    .repeat(requestConfigs.length, "index") // Iteracja przez `requestConfigs`
+    .on(
+      exec((session) => {
+        const index = session.get("index"); // Pobierz aktualny indeks
+        const { method, endpoint, body } = requestConfigs[index];
 
-    return scenario(`Scenario ${index + 1}: ${method} ${endpoint}`)
-      .repeat(1) // Powtórzenie dla każdego wpisu w tablicy (możesz zmodyfikować liczbę)
-      .on(request.check(http.status().is(200)));
-  });
+        const req = http(`${method} ${endpoint}`);
+        const request =
+          method === "GET"
+            ? req.get(endpoint)
+            : req[method.toLowerCase()](endpoint)
+              .body(body ? JSON.stringify(body) : undefined)
+              .asJson();
 
-  // Dostosowanie liczby użytkowników i czasu trwania do liczby wpisów
-  setUp(
-    scenarios.map((s) =>
-      s.injectOpen({
-        rampUsers: 10 * requestConfigs.length, // Liczba użytkowników proporcjonalna do liczby żądań
-        during: 10 * requestConfigs.length,   // Czas trwania proporcjonalny do liczby żądań
+        // Wykonanie żądania z walidacją statusu
+        return request.check(http.status().is(200));
       })
-    )
+    );
+
+  // Stałe ustawienia symulacji
+  setUp(
+    dynamicScenario.injectOpen({
+      rampUsers: 20, // Stała liczba użytkowników
+      during: 30,    // Stały czas trwania symulacji
+    })
   ).protocols(http.baseUrl(baseUrl));
 });
