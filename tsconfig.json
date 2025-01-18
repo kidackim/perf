@@ -4,11 +4,8 @@
     "outDir": "target",
     "lib": ["es2021", "dom"],
     "target": "es2021",
-//    "module": "node16",
-//    "moduleResolution": "node16",
-    "module": "ES2020",
-    "moduleResolution": "node",
-//    "esModuleInterop": true,
+    "module": "node16",
+    "moduleResolution": "node16",
     "strict": true,
     "typeRoots": ["./node_modules/@types"],
     "forceConsistentCasingInFileNames": true

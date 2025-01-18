@@ -1,9 +1,7 @@
 {
   "name": "gatling-ts-demo",
   "version": "3.13.2",
-  "private": true,
   "type": "module",
-  "main": "target/bundle",
   "dependencies": {
     "@cucumber/cucumber": "^11.2.0",
     "@gatling.io/core": "^3.13.105",
@@ -15,13 +13,5 @@
     "prettier": "3.4.2",
     "ts-node": "^10.9.2",
     "typescript": "^5.7.2"
-  },
-  "scripts": {
-    "clean": "rimraf target",
-    "format": "prettier --write \"**/*.ts\"",
-    "check": "tsc --noEmit",
-    "build": "tsc --noEmit && gatling build --typescript",
-    "recorder": "gatling recorder --typescript",
-    "computerdatabase": "tsc --noEmit && gatling run --typescript --simulation computerdatabase"
   }
 }
