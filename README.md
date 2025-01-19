@@ -1,77 +1,105 @@
 
-# Gatling Performance Testing for Web Applications
+# Performance Testing with Gatling and TypeScript
 
-A performance testing project using Gatling to simulate realistic user scenarios (`search`, `browse`, `edit`) for web applications.
+This project provides a performance testing framework using **Gatling** with **TypeScript**. It allows for the definition of test scenarios and steps, as well as the generation of comprehensive HTML reports after test execution.
 
-## Wymagania wstępne
+---
 
-Projekt wymaga [Node.js](https://nodejs.org/en/download) w wersji co najmniej 18 (tylko wersje LTS) oraz npm w wersji co najmniej 8 (dostarczony z Node.js).
+## Getting Started
 
-## Instalacja
+### Prerequisites
 
-1. Pobrać repozytorium projektu.
-2. Zainstalować wymagane zależności za pomocą poniższych poleceń:
+Before running the tests, ensure that the following tools are installed:
+- **Node.js** (version 16 or higher recommended)
+- **NPM** (Node Package Manager)
 
-```shell
-cd <ścieżka-projektu>
-npm install  # Zainstaluj zależności
+### Installation
+
+Clone the repository and install the dependencies:
+
+```bash
+git clone <repository_url>
+cd <project_directory>
+npm install
 ```
 
-## Struktura projektu
+---
 
-Projekt opiera się na trzech głównych krokach symulacji:
-- `search`: symulacja wyszukiwania danych w aplikacji.
-- `browse`: przeglądanie dostępnych zasobów.
-- `edit`: edytowanie elementów aplikacji.
+## Running Tests
+
+To execute a test scenario, use the following command:
+
+```bash
+npx gatling run --typescript --simulation <simulation_name>
 ```
 
-## Konfiguracja
+### Example
 
-Konfiguracja symulacji odbywa się w plikach projektu Gatling. Poniższe sekcje definiują:
-- Strona docelowa: **url serwera testowego**.
-- Liczba użytkowników: **np. symulacja 100 równoczesnych użytkowników**.
-- Przykład konfiguracji kroków symulacji:
-
-```typescript
-const search = scenario('Search').exec(
-  http('Search Request').get('/search?q=item')
-);
-
-const browse = scenario('Browse').exec(
-  http('Browse Request').get('/browse')
-);
-
-const edit = scenario('Edit').exec(
-  http('Edit Request').put('/edit/1')
-);
-```
+```bash
+npx gatling run --typescript --simulation sym
 ```
 
-## Uruchamianie testów
+This command:
+1. Runs the simulation defined in files containing `gatling-sym` in their names, located in the `src` folder.
+2. Generates test reports in the `target` folder in HTML format.
 
-Aby uruchomić testy wydajnościowe, wykonaj następujące kroki:
+---
 
-```shell
-npx gatling run --simulation search
-npx gatling run --simulation browse
-npx gatling run --simulation edit
+## Project Structure
+
+The project is organized as follows:
+
+```
+src/
+├── steps/
+│   └── *.ts         # Step definitions for test scenarios, including request models
+├── gatling-sym*.ts  # Simulation files defining test behavior and user flows
+target/
+└── results/         # HTML reports generated after each test execution
 ```
 
-Po uruchomieniu testu wyniki zostaną zapisane w katalogu `results`, gdzie znajdziesz raporty z testów.
-```
+### Key Components
 
-## Autorzy
+#### `src/steps/`
+This folder contains step definitions for test scenarios. Each file includes:
+- Request models (e.g., headers, payloads, endpoints).
+- Definitions of actions such as sending requests or validating responses.
 
-Projekt został przygotowany przez Zespół Wydajności Aplikacji. W razie pytań prosimy o kontakt.
+#### `src/gatling-sym*.ts`
+Files in this folder define the structure and flow of the tests, including:
+- Steps to be executed in the simulation.
+- User behavior models (e.g., number of users, ramp-up time, and load patterns).
 
-```shell
-npm run clean # Delete Gatling bundled code and generated reports
-npm run format # Format code with prettier
-npm run check # TypeScript project only, type check but don't build or run
-npm run build # Build project but don't run
-npm run computerdatabase # Run the included computerdatabase simulation
-npm run recorder # Starts the Gatling Recorder
-## Licencja
+---
 
-Projekt jest objęty licencją MIT. Więcej szczegółów znajdziesz w pliku `LICENSE`.
-```
+## Test Reports
+
+After running a test, an HTML report is generated in the `target` folder. The report includes:
+- Detailed metrics such as response times, throughput, and error rates.
+- Visualization of user behavior during the test.
+
+To view the report, open the generated HTML file in any web browser.
+
+---
+
+## Documentation and References
+
+For more details on Gatling, visit the [official Gatling documentation](https://gatling.io/docs/).
+
+For TypeScript-specific usage with Gatling, refer to [Gatling TypeScript documentation](https://gatling.io/docs/gatling/reference/current/extensions/typescript/).
+
+---
+
+## Contributing
+
+Contributions are welcome! Please fork the repository and submit a pull request for any feature additions or bug fixes.
+
+---
+
+## License
+
+This project is licensed under the [MIT License](LICENSE).
+
+---
+
+If you have any questions or issues, feel free to open an issue in the repository or reach out to the project maintainers.
