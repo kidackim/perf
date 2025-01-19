@@ -1,0 +1,14 @@
+feat: Add Gatling test framework with TypeScript setup
+
+Integrated Gatling with TypeScript to enable performance testing
+and report generation. Configured project structure and provided
+key components for defining and running test scenarios.
+
+Key changes:
+- Added TypeScript support for Gatling.
+- Defined step implementations in `src/steps` folder.
+- Created simulation files with `gatling-sym` prefix for test flows.
+- Configured reporting system to generate HTML reports in the `target` folder.
+- Updated README with detailed instructions on running tests and project structure.
+
+Related documentation: https://gatling.io/docs/
