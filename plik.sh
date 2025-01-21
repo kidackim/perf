@@ -3,7 +3,7 @@
 # Konfiguracja
 BASE_URL="https://github.com/gatling/gatling-js/releases/download" # Podstawowy URL
 DEFAULT_VERSION="v3.13.105" # Domyślna wersja
-DEFAULT_FILENAME="gatling-js-bundle-3.13.105-Windows%20NT-x64.zip" # Domyślna nazwa pliku
+DEFAULT_FILENAME="gatling-js-bundle-3.13.105-Windows NT-x64.zip" # Domyślna nazwa pliku
 TEMP_DIR="./temp-npm-install" # Tymczasowy katalog do przechowywania pliku
 
 # Funkcja logowania błędów
@@ -17,15 +17,48 @@ log_info() {
   echo "[INFO] $1"
 }
 
-# Funkcja budowania pełnego adresu URL z korektą znaków
+# Funkcja kodowania URL
+url_encode() {
+  local raw_url=$1
+  local encoded_url=""
+  local char
+
+  for (( i=0; i<${#raw_url}; i++ )); do
+    char="${raw_url:$i:1}"
+    case "$char" in
+      [a-zA-Z0-9.~_-]) encoded_url+="$char" ;;  # Nie trzeba kodować tych znaków
+      *) encoded_url+=$(printf '%%%02X' "'$char") ;;  # Kodowanie znaków specjalnych
+    esac
+  done
+  echo "$encoded_url"
+}
+
+# Funkcja budowania pełnego adresu URL z kodowaniem znaków
 build_download_url() {
   local version=$1
   local filename=$2
-  local raw_url="$BASE_URL\\$version\\$filename"
 
-  # Zastąpienie \ na /
-  local corrected_url="${raw_url//\\//}"
-  echo "$corrected_url"
+  # Kodowanie nazwy pliku
+  local encoded_filename
+  encoded_filename=$(url_encode "$filename")
+  local full_url="$BASE_URL/$version/$encoded_filename"
+  echo "$full_url"
+}
+
+# Funkcja sprawdzania poprawności adresu URL
+verify_url() {
+  local url=$1
+  log_info "Weryfikacja URL: $url"
+  local http_status
+  http_status=$(curl -o /dev/null -s -w "%{http_code}" "$url")
+
+  if [[ "$http_status" -eq 200 ]]; then
+    log_info "URL jest poprawny: $url"
+    return 0
+  else
+    log_error "URL jest nieprawidłowy lub plik nie istnieje. Status HTTP: $http_status"
+    return 1
+  fi
 }
 
 # Funkcja przygotowania katalogu tymczasowego
@@ -67,9 +100,12 @@ main() {
   # Przygotowanie katalogu tymczasowego
   prepare_temp_directory "$TEMP_DIR"
 
-  # Zbudowanie adresu URL z korektą znaków
+  # Zbudowanie adresu URL z kodowaniem znaków
   local url
   url=$(build_download_url "$version" "$filename")
+
+  # Weryfikacja adresu URL
+  verify_url "$url" || exit 1
 
   # Pobranie pliku ZIP
   local zip_path
