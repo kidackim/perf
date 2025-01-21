@@ -2,7 +2,7 @@
 
 # Konfiguracja
 REPO="gatling/gatling-js-bundle"
-DEFAULT_VERSION="1.0" # Domyślna wersja
+DEFAULT_VERSION="1.0.0" # Domyślna wersja
 DOWNLOAD_DIR="./gatling-js-bundle" # Katalog docelowy
 
 # Funkcja logowania błędów
@@ -14,6 +14,20 @@ log_error() {
 # Funkcja logowania informacji
 log_info() {
   echo "[INFO] $1"
+}
+
+# Funkcja przygotowania katalogu docelowego
+prepare_directory() {
+  local dir=$1
+  if [ ! -d "$dir" ]; then
+    log_info "Katalog $dir nie istnieje. Tworzenie..."
+    mkdir -p "$dir" || log_error "Nie udało się utworzyć katalogu $dir."
+    log_info "Katalog $dir został utworzony."
+  else
+    log_info "Katalog $dir istnieje. Usuwanie zawartości..."
+    rm -rf "$dir"/* || log_error "Nie udało się usunąć plików z katalogu $dir."
+    log_info "Zawartość katalogu $dir została usunięta."
+  fi
 }
 
 # Funkcja pobierania najnowszej wersji
@@ -54,7 +68,7 @@ download_and_extract() {
   log_info "Pobieranie wersji $version z $download_url..."
   curl -L -o "$zip_file" "$download_url" || log_error "Błąd podczas pobierania pliku $zip_file."
 
-  log_info "Rozpakowywanie pliku $zip_file..."
+  log_info "Rozpakowywanie pliku $zip_file do katalogu $DOWNLOAD_DIR..."
   unzip -o "$zip_file" -d "$DOWNLOAD_DIR" || log_error "Błąd podczas rozpakowywania pliku $zip_file."
 
   log_info "Wersja $version została pomyślnie pobrana i rozpakowana."
@@ -64,11 +78,16 @@ download_and_extract() {
 main() {
   local version=${1:-$DEFAULT_VERSION}
 
+  # Przygotowanie katalogu docelowego
+  prepare_directory "$DOWNLOAD_DIR"
+
+  # Weryfikacja wersji
   if ! check_version_exists "$version"; then
     log_info "Domyślna wersja $version nie jest dostępna. Pobieranie najnowszej wersji..."
     version=$(get_latest_version)
   fi
 
+  # Pobieranie i rozpakowywanie
   download_and_extract "$version"
 }
 
