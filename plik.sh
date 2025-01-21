@@ -61,15 +61,15 @@ if (Test-Path -Path $OutputFilePath) {
 # Instalacja za pomocą npx gatling install
 Log-Info "Instalacja pliku za pomocą npx gatling install..."
 $npxCommand = "npx gatling install $OutputFilePath"
-Invoke-Expression $npxCommand
 
-if ($LASTEXITCODE -ne 0) {
-    $ErrorMessage = "already exists"
-    if ($Error[0] -like "*$ErrorMessage*") {
-        Log-Info "Biblioteka już istnieje. Kontynuowanie..."
+try {
+    Invoke-Expression $npxCommand 2>$null # Ukrycie błędu w konsoli
+} catch {
+    if ($_.Exception.Message -like "*Directory*already exists*") {
+        Log-Info "Katalog docelowy już istnieje. Pomijanie błędu i kontynuacja..."
     } else {
-        Log-Error "Wystąpił błąd podczas instalacji pliku za pomocą npx gatling install."
+        Log-Error "Wystąpił nieoczekiwany błąd podczas instalacji: $($_.Exception.Message)"
     }
-} else {
-    Log-Info "Pomyślnie zainstalowano plik za pomocą npx gatling install."
 }
+
+Log-Info "Proces instalacji został zakończony."
