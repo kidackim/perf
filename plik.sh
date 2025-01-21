@@ -15,14 +15,27 @@ log_info() {
   echo "[INFO] $1"
 }
 
-# Funkcja pobierania i instalacji pliku za pomocą npm
-download_and_install() {
+# Funkcja pobierania pliku za pomocą PowerShell (Invoke-WebRequest)
+download_file() {
   local version=$1
   local filename=${2:-$DEFAULT_FILENAME}
   local url="$BASE_URL/$version/$filename"
 
-  log_info "Pobieranie pliku $filename z $url..."
-  curl -L -o "$filename" "$url" || log_error "Błąd podczas pobierania pliku $filename."
+  log_info "Pobieranie pliku $filename z $url za pomocą PowerShell..."
+
+  # Polecenie PowerShell
+  powershell -Command "try {
+    Invoke-WebRequest -Uri '$url' -OutFile '$filename' -ErrorAction Stop
+    Write-Host 'Pobieranie zakończone sukcesem.'
+  } catch {
+    Write-Host 'Błąd podczas pobierania pliku: ' \$_
+    exit 1
+  }" || log_error "Błąd podczas pobierania pliku $filename za pomocą PowerShell."
+}
+
+# Funkcja instalacji pliku za pomocą npm
+install_with_npm() {
+  local filename=$1
 
   log_info "Instalacja pakietu $filename za pomocą npm..."
   npm install "$filename" || log_error "Błąd podczas instalacji pakietu npm z pliku $filename."
@@ -35,8 +48,11 @@ main() {
   local version=${1:-$DEFAULT_VERSION}
   local filename=${2:-$DEFAULT_FILENAME}
 
-  # Pobranie i instalacja pakietu
-  download_and_install "$version" "$filename"
+  # Pobranie pliku
+  download_file "$version" "$filename"
+
+  # Instalacja pakietu
+  install_with_npm "$filename"
 }
 
 # Uruchomienie skryptu
