@@ -25,15 +25,15 @@ if (-not (Test-Path -Path $PackageJsonPath)) {
 Log-Info "Odczytywanie pliku package.json..."
 $PackageJsonContent = Get-Content -Path $PackageJsonPath -Raw | ConvertFrom-Json
 
-# Pobieranie wersji @gatling.io/cli
-$GatlingVersion = $PackageJsonContent.dependencies."@gatling.io/cli"
-if (-not $GatlingVersion) {
-    Log-Error "Nie znaleziono wpisu dla @gatling.io/cli w pliku package.json."
+# Pobieranie wersji @gatling.io/cli z devDependencies
+if ($PackageJsonContent.devDependencies."@gatling.io/cli") {
+    $GatlingVersion = $PackageJsonContent.devDependencies."@gatling.io/cli"
+    Log-Info "Znaleziono wersję @gatling.io/cli: $GatlingVersion"
+} else {
+    Log-Error "Nie znaleziono wpisu dla @gatling.io/cli w sekcji devDependencies w pliku package.json."
 }
 
-Log-Info "Znaleziono wersję @gatling.io/cli: $GatlingVersion"
-
-# Tworzenie URL do pobrania pliku
+# Usuwanie prefiksu ^ z wersji
 $VersionTag = "v$($GatlingVersion.TrimStart('^'))"
 $FileName = "gatling-js-bundle-$($VersionTag)-Windows_NT-x64.zip"
 $DownloadUrl = "$BaseUrl/$VersionTag/$FileName"
