@@ -45,14 +45,18 @@ Log-Info "URL do pobrania: $DownloadUrl"
 Log-Info "Plik zostanie zapisany jako: $OutputFilePath"
 
 # Pobieranie pliku
-Log-Info "Rozpoczynanie pobierania pliku..."
-Invoke-WebRequest -Uri $DownloadUrl -OutFile $OutputFilePath -UseBasicParsing -ErrorAction Stop
+if (Test-Path -Path $OutputFilePath) {
+    Log-Info "Plik $OutputFilePath już istnieje. Pomijanie pobierania."
+} else {
+    Log-Info "Rozpoczynanie pobierania pliku..."
+    Invoke-WebRequest -Uri $DownloadUrl -OutFile $OutputFilePath -UseBasicParsing -ErrorAction Stop
 
-if (-not (Test-Path -Path $OutputFilePath)) {
-    Log-Error "Nie udało się pobrać pliku: $OutputFilePath"
+    if (-not (Test-Path -Path $OutputFilePath)) {
+        Log-Error "Nie udało się pobrać pliku: $OutputFilePath"
+    }
+
+    Log-Info "Pomyślnie pobrano plik: $OutputFilePath"
 }
-
-Log-Info "Pomyślnie pobrano plik: $OutputFilePath"
 
 # Instalacja za pomocą npx gatling install
 Log-Info "Instalacja pliku za pomocą npx gatling install..."
@@ -60,7 +64,12 @@ $npxCommand = "npx gatling install $OutputFilePath"
 Invoke-Expression $npxCommand
 
 if ($LASTEXITCODE -ne 0) {
-    Log-Error "Wystąpił błąd podczas instalacji pliku za pomocą npx gatling install."
+    $ErrorMessage = "already exists"
+    if ($Error[0] -like "*$ErrorMessage*") {
+        Log-Info "Biblioteka już istnieje. Kontynuowanie..."
+    } else {
+        Log-Error "Wystąpił błąd podczas instalacji pliku za pomocą npx gatling install."
+    }
+} else {
+    Log-Info "Pomyślnie zainstalowano plik za pomocą npx gatling install."
 }
-
-Log-Info "Pomyślnie zainstalowano plik za pomocą npx gatling install."
