@@ -17,6 +17,17 @@ log_info() {
   echo "[INFO] $1"
 }
 
+# Funkcja budowania pełnego adresu URL z korektą znaków
+build_download_url() {
+  local version=$1
+  local filename=$2
+  local raw_url="$BASE_URL\\$version\\$filename"
+
+  # Zastąpienie \ na /
+  local corrected_url="${raw_url//\\//}"
+  echo "$corrected_url"
+}
+
 # Funkcja przygotowania katalogu tymczasowego
 prepare_temp_directory() {
   local dir=$1
@@ -31,17 +42,15 @@ prepare_temp_directory() {
 
 # Funkcja pobierania pliku
 download_file() {
-  local version=$1
-  local filename=$2
-  local url="$BASE_URL/$version/$filename"
-  local output_path="$TEMP_DIR/$filename"
+  local url=$1
+  local output_path="$TEMP_DIR/$(basename "$url")"
 
-  log_info "Pobieranie pliku $filename z $url..."
-  curl -L -o "$output_path" "$url" || log_error "Błąd podczas pobierania pliku $filename."
+  log_info "Pobieranie pliku z $url..."
+  curl -L -o "$output_path" "$url" || log_error "Błąd podczas pobierania pliku z $url."
   echo "$output_path"
 }
 
-# Funkcja instalacji zależności NPM z pliku ZIP
+# Funkcja instalacji NPM bezpośrednio z pliku ZIP
 install_from_zip() {
   local zip_path=$1
 
@@ -58,11 +67,15 @@ main() {
   # Przygotowanie katalogu tymczasowego
   prepare_temp_directory "$TEMP_DIR"
 
+  # Zbudowanie adresu URL z korektą znaków
+  local url
+  url=$(build_download_url "$version" "$filename")
+
   # Pobranie pliku ZIP
   local zip_path
-  zip_path=$(download_file "$version" "$filename")
+  zip_path=$(download_file "$url")
 
-  # Instalacja pakietu z pliku ZIP
+  # Instalacja pakietu bezpośrednio z pliku ZIP
   install_from_zip "$zip_path"
 }
 
