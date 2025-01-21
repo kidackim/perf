@@ -1,83 +1,85 @@
 # Configuration
-$PackageJsonPath = "package.json" # Path to the package.json file
-$BaseUrl = "https://github.com/gatling/gatling-js/releases/download" # Base URL for downloading Gatling bundle
-$OutputDir = "$PSScriptRoot" # Directory where the file will be saved
+$PackageJsonPath = "package.json" # Path to package.json file
+$BaseUrl = "https://github.com/gatling/gatling-js/releases/download"
+$OutputDir = "$PSScriptRoot" # Directory to save the file
 
-# Function for logging errors
+# Function for error logging
 function Log-Error {
-    param (
-        [string]$Message
-    )
-    Write-Host "[ERROR] $Message" -ForegroundColor Red
+    param ([string]$Message)
+    Write-Error "[ERROR] $Message"
     exit 1
 }
 
-# Function for logging informational messages
+# Function for info logging
 function Log-Info {
-    param (
-        [string]$Message
-    )
+    param ([string]$Message)
     Write-Host "[INFO] $Message" -ForegroundColor Green
 }
 
-# Check if the package.json file exists
+# Verify if package.json exists
 if (-not (Test-Path -Path $PackageJsonPath)) {
-    Log-Error "The package.json file was not found at the specified location: $PackageJsonPath"
+    Log-Error "package.json file not found at: $PackageJsonPath"
 }
 
-# Read and parse the package.json file
-Log-Info "Reading the package.json file..."
-$PackageJsonContent = try {
-    Get-Content -Path $PackageJsonPath -Raw | ConvertFrom-Json
+# Read package.json content
+Log-Info "Reading package.json..."
+try {
+    $PackageJsonContent = Get-Content -Path $PackageJsonPath -Raw | ConvertFrom-Json
 } catch {
-    Log-Error "Failed to parse the package.json file. Ensure it is valid JSON."
+    Log-Error "Failed to parse package.json. Please ensure it is valid JSON."
 }
 
-# Retrieve the version of @gatling.io/cli from devDependencies
+# Extract @gatling.io/cli version from devDependencies
 if ($PackageJsonContent.devDependencies."@gatling.io/cli") {
-    $GatlingVersion = $PackageJsonContent.devDependencies."@gatling.io/cli"
-    # Remove the ^ prefix from the version string
-    $GatlingVersion = $GatlingVersion.TrimStart('^')
+    $GatlingVersion = $PackageJsonContent.devDependencies."@gatling.io/cli".TrimStart('^')
     Log-Info "Found @gatling.io/cli version: $GatlingVersion"
 } else {
-    Log-Error "The @gatling.io/cli dependency was not found in the devDependencies section of the package.json file."
+    Log-Error "@gatling.io/cli entry not found in devDependencies in package.json."
 }
 
-# Construct the download URL
-$VersionTag = "v$GatlingVersion" # Tag with the 'v' prefix
-$FileName = "gatling-js-bundle-$GatlingVersion-Windows_NT-x64.zip" # File name without the 'v' prefix
+# Build the download URL
+$VersionTag = "v$GatlingVersion" # Version tag with 'v'
+$FileName = "gatling-js-bundle-$GatlingVersion-Windows_NT-x64.zip" # File name without 'v'
 $DownloadUrl = "$BaseUrl/$VersionTag/$FileName"
 $OutputFilePath = Join-Path -Path $OutputDir -ChildPath $FileName
 
 Log-Info "Download URL: $DownloadUrl"
-Log-Info "The file will be saved as: $OutputFilePath"
+Log-Info "File will be saved as: $OutputFilePath"
 
-# Download the file if it doesn't already exist
+# Download the file
 if (Test-Path -Path $OutputFilePath) {
-    Log-Info "The file $OutputFilePath already exists. Skipping download."
+    Log-Info "File $OutputFilePath already exists. Skipping download."
 } else {
-    Log-Info "Starting the file download..."
+    Log-Info "Starting file download..."
     try {
         Invoke-WebRequest -Uri $DownloadUrl -OutFile $OutputFilePath -UseBasicParsing -ErrorAction Stop
-        Log-Info "File downloaded successfully: $OutputFilePath"
+        Log-Info "File successfully downloaded: $OutputFilePath"
     } catch {
-        Log-Error "Failed to download the file from $DownloadUrl"
+        Log-Error "Failed to download the file from: $DownloadUrl"
     }
 }
 
-# Install the downloaded file using npx gatling install
-Log-Info "Installing the file using npx gatling install..."
+# Install using npx gatling install
+Log-Info "Installing file using npx gatling install..."
 $npxCommand = "npx gatling install $OutputFilePath"
+Invoke-Expression $npxCommand
 
-try {
-    # Suppress error messages and handle them in the catch block
-    Invoke-Expression $npxCommand 2>$null | Out-Null
-} catch {
-    if ($_.Exception.Message -like "*already exists*") {
-        Log-Info "The target directory already exists. Skipping installation."
+if ($LASTEXITCODE -ne 0) {
+    if ($Error[0] -match "already exists") {
+        Log-Info "The library already exists. Continuing..."
     } else {
-        Log-Error "An unexpected error occurred during installation: $($_.Exception.Message)"
+        Log-Error "An error occurred during installation with npx gatling install."
     }
+} else {
+    Log-Info "File successfully installed using npx gatling install."
 }
 
-Log-Info "Installation process completed successfully."
+
+
+feat(powershell): Add dynamic script for downloading and installing Gatling JS
+
+- Replaced the previously static inclusion of the Gatling JS bundle in the repository with a dynamic PowerShell script.
+- The script automatically retrieves the correct version of @gatling.io/cli from package.json.
+- Implements error handling and logging for improved reliability.
+- Dynamically constructs the download URL and installs the bundle using `npx gatling install`.
+- Modernized for compatibility with PowerShell standards and enhanced maintainability.
