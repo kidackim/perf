@@ -48,4 +48,15 @@ install_with_npm() {
 
 # Główna funkcja
 main() {
-  local version=${1:-$DEFAULT_VERS
+  local version=${1:-$DEFAULT_VERSION}
+  local filename=${2:-$DEFAULT_FILENAME}
+
+  # Pobranie pliku
+  download_file "$version" "$filename"
+
+  # Instalacja pakietu
+  install_with_npm "$filename"
+}
+
+# Uruchomienie skryptu
+main "$@"
