@@ -1,62 +1,40 @@
 #!/bin/bash
 
-# Konfiguracja
-BASE_URL="https://github.com/gatling/gatling-js/releases/download"
-DEFAULT_VERSION="v3.13.105"
-DEFAULT_FILENAME="gatling-js-bundle-3.13.105-Windows%20NT-x64.zip"
+# URL pliku do pobrania
+FILE_URL="https://github.com/gatling/gatling-js/releases/download/v3.13.105/gatling-js-bundle-3.13.105-Windows_NT-x64.zip"
 
-# Funkcje logowania
+# Ścieżka, gdzie plik zostanie zapisany
+DOWNLOAD_DIR="$PWD"  # Aktualny katalog roboczy
+OUTPUT_FILE="$DOWNLOAD_DIR/gatling-js-bundle-3.13.105-Windows_NT-x64.zip"
+
+# Funkcja logowania błędów
 log_error() {
   echo "[ERROR] $1" >&2
   exit 1
 }
 
+# Funkcja logowania informacji
 log_info() {
   echo "[INFO] $1"
 }
 
-# Funkcja pobierania pliku za pomocą PowerShell (Invoke-WebRequest)
-download_file() {
-  local version=$1
-  local filename=${2:-$DEFAULT_FILENAME}
-  local url="$BASE_URL/$version/$filename"
+# Pobieranie pliku za pomocą Chrome w trybie bezgłowym
+log_info "Pobieranie pliku $FILE_URL za pomocą Google Chrome..."
 
-  log_info "Pobieranie pliku $filename z $url za pomocą PowerShell..."
+google-chrome --headless \
+  --disable-gpu \
+  --no-sandbox \
+  --disable-dev-shm-usage \
+  --disable-extensions \
+  --disable-logging \
+  --window-size=1920,1080 \
+  --remote-debugging-port=9222 \
+  --user-data-dir="$DOWNLOAD_DIR/chrome-profile" \
+  "$FILE_URL" || log_error "Błąd podczas pobierania pliku za pomocą Google Chrome."
 
-  # Pobieranie pliku za pomocą Invoke-WebRequest
-  powershell -Command "
-    try {
-      Write-Host 'Pobieranie pliku: $filename z URL: $url'
-      Invoke-WebRequest -Uri '$url' -OutFile '$filename' -ErrorAction Stop
-      Write-Host 'Pobieranie zakończone sukcesem: $filename'
-    } catch {
-      Write-Error 'Błąd podczas pobierania pliku: $_'
-      exit 1
-    }
-  " || log_error "Błąd podczas pobierania pliku $filename za pomocą PowerShell."
-}
-
-# Funkcja instalacji pliku za pomocą npm
-install_with_npm() {
-  local filename=$1
-
-  log_info "Instalacja pakietu $filename za pomocą npm..."
-  npm install "$filename" || log_error "Błąd podczas instalacji pakietu npm z pliku $filename."
-
-  log_info "Pakiet $filename został pomyślnie zainstalowany."
-}
-
-# Główna funkcja
-main() {
-  local version=${1:-$DEFAULT_VERSION}
-  local filename=${2:-$DEFAULT_FILENAME}
-
-  # Pobranie pliku
-  download_file "$version" "$filename"
-
-  # Instalacja pakietu
-  install_with_npm "$filename"
-}
-
-# Uruchomienie skryptu
-main "$@"
+# Sprawdzenie, czy plik został pobrany
+if [ -f "$OUTPUT_FILE" ]; then
+  log_info "Plik został pomyślnie pobrany do: $OUTPUT_FILE"
+else
+  log_error "Plik nie został pobrany lub nie istnieje w lokalizacji: $OUTPUT_FILE"
+fi
