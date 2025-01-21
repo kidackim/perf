@@ -1,40 +1,64 @@
-#!/bin/bash
-
-# URL pliku do pobrania
-FILE_URL="https://github.com/gatling/gatling-js/releases/download/v3.13.105/gatling-js-bundle-3.13.105-Windows_NT-x64.zip"
-
-# Ścieżka, gdzie plik zostanie zapisany
-DOWNLOAD_DIR="$PWD"  # Aktualny katalog roboczy
-OUTPUT_FILE="$DOWNLOAD_DIR/gatling-js-bundle-3.13.105-Windows_NT-x64.zip"
+# Konfiguracja
+$PackageJsonPath = "package.json" # Ścieżka do pliku package.json
+$BaseUrl = "https://github.com/gatling/gatling-js/releases/download"
+$OutputDir = "$PSScriptRoot" # Katalog, w którym zapiszesz plik
 
 # Funkcja logowania błędów
-log_error() {
-  echo "[ERROR] $1" >&2
-  exit 1
+function Log-Error {
+    param ([string]$Message)
+    Write-Host "[ERROR] $Message" -ForegroundColor Red
+    exit 1
 }
 
 # Funkcja logowania informacji
-log_info() {
-  echo "[INFO] $1"
+function Log-Info {
+    param ([string]$Message)
+    Write-Host "[INFO] $Message" -ForegroundColor Green
 }
 
-# Pobieranie pliku za pomocą Chrome w trybie bezgłowym
-log_info "Pobieranie pliku $FILE_URL za pomocą Google Chrome..."
+# Sprawdzanie, czy plik package.json istnieje
+if (-not (Test-Path -Path $PackageJsonPath)) {
+    Log-Error "Nie znaleziono pliku package.json w lokalizacji: $PackageJsonPath"
+}
 
-google-chrome --headless \
-  --disable-gpu \
-  --no-sandbox \
-  --disable-dev-shm-usage \
-  --disable-extensions \
-  --disable-logging \
-  --window-size=1920,1080 \
-  --remote-debugging-port=9222 \
-  --user-data-dir="$DOWNLOAD_DIR/chrome-profile" \
-  "$FILE_URL" || log_error "Błąd podczas pobierania pliku za pomocą Google Chrome."
+# Odczytywanie package.json
+Log-Info "Odczytywanie pliku package.json..."
+$PackageJsonContent = Get-Content -Path $PackageJsonPath -Raw | ConvertFrom-Json
 
-# Sprawdzenie, czy plik został pobrany
-if [ -f "$OUTPUT_FILE" ]; then
-  log_info "Plik został pomyślnie pobrany do: $OUTPUT_FILE"
-else
-  log_error "Plik nie został pobrany lub nie istnieje w lokalizacji: $OUTPUT_FILE"
-fi
+# Pobieranie wersji @gatling.io/cli
+$GatlingVersion = $PackageJsonContent.dependencies."@gatling.io/cli"
+if (-not $GatlingVersion) {
+    Log-Error "Nie znaleziono wpisu dla @gatling.io/cli w pliku package.json."
+}
+
+Log-Info "Znaleziono wersję @gatling.io/cli: $GatlingVersion"
+
+# Tworzenie URL do pobrania pliku
+$VersionTag = "v$($GatlingVersion.TrimStart('^'))"
+$FileName = "gatling-js-bundle-$($VersionTag)-Windows_NT-x64.zip"
+$DownloadUrl = "$BaseUrl/$VersionTag/$FileName"
+$OutputFilePath = Join-Path -Path $OutputDir -ChildPath $FileName
+
+Log-Info "URL do pobrania: $DownloadUrl"
+Log-Info "Plik zostanie zapisany jako: $OutputFilePath"
+
+# Pobieranie pliku
+Log-Info "Rozpoczynanie pobierania pliku..."
+Invoke-WebRequest -Uri $DownloadUrl -OutFile $OutputFilePath -UseBasicParsing -ErrorAction Stop
+
+if (-not (Test-Path -Path $OutputFilePath)) {
+    Log-Error "Nie udało się pobrać pliku: $OutputFilePath"
+}
+
+Log-Info "Pomyślnie pobrano plik: $OutputFilePath"
+
+# Instalacja za pomocą npx gatling install
+Log-Info "Instalacja pliku za pomocą npx gatling install..."
+$npxCommand = "npx gatling install $OutputFilePath"
+Invoke-Expression $npxCommand
+
+if ($LASTEXITCODE -ne 0) {
+    Log-Error "Wystąpił błąd podczas instalacji pliku za pomocą npx gatling install."
+}
+
+Log-Info "Pomyślnie zainstalowano plik za pomocą npx gatling install."
