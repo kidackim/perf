@@ -23,14 +23,17 @@ download_file() {
 
   log_info "Pobieranie pliku $filename z $url za pomocą PowerShell..."
 
-  # Polecenie PowerShell
-  powershell -Command "try {
-    Invoke-WebRequest -Uri '$url' -OutFile '$filename' -ErrorAction Stop
-    Write-Host 'Pobieranie zakończone sukcesem.'
-  } catch {
-    Write-Host 'Błąd podczas pobierania pliku: ' \$_
-    exit 1
-  }" || log_error "Błąd podczas pobierania pliku $filename za pomocą PowerShell."
+  # Pobieranie pliku za pomocą Invoke-WebRequest
+  powershell -Command "
+    try {
+      Write-Host 'Pobieranie pliku: $filename z URL: $url'
+      Invoke-WebRequest -Uri '$url' -OutFile '$filename' -ErrorAction Stop
+      Write-Host 'Pobieranie zakończone sukcesem: $filename'
+    } catch {
+      Write-Error 'Błąd podczas pobierania pliku: $_'
+      exit 1
+    }
+  " || log_error "Błąd podczas pobierania pliku $filename za pomocą PowerShell."
 }
 
 # Funkcja instalacji pliku za pomocą npm
@@ -45,15 +48,4 @@ install_with_npm() {
 
 # Główna funkcja
 main() {
-  local version=${1:-$DEFAULT_VERSION}
-  local filename=${2:-$DEFAULT_FILENAME}
-
-  # Pobranie pliku
-  download_file "$version" "$filename"
-
-  # Instalacja pakietu
-  install_with_npm "$filename"
-}
-
-# Uruchomienie skryptu
-main "$@"
+  local version=${1:-$DEFAULT_VERS
