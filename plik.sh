@@ -63,8 +63,10 @@ Log-Info "Instalacja pliku za pomocą npx gatling install..."
 $npxCommand = "npx gatling install $OutputFilePath"
 
 try {
-    Invoke-Expression $npxCommand 2>$null # Ukrycie błędu w konsoli
+    # Przekierowanie błędów do $null
+    Invoke-Expression $npxCommand 2>$null | Out-Null
 } catch {
+    # Obsługa błędów
     if ($_.Exception.Message -like "*Directory*already exists*") {
         Log-Info "Katalog docelowy już istnieje. Pomijanie błędu i kontynuacja..."
     } else {
