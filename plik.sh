@@ -28,14 +28,16 @@ $PackageJsonContent = Get-Content -Path $PackageJsonPath -Raw | ConvertFrom-Json
 # Pobieranie wersji @gatling.io/cli z devDependencies
 if ($PackageJsonContent.devDependencies."@gatling.io/cli") {
     $GatlingVersion = $PackageJsonContent.devDependencies."@gatling.io/cli"
+    # Usuwanie prefiksu ^ z wersji
+    $GatlingVersion = $GatlingVersion.TrimStart('^')
     Log-Info "Znaleziono wersję @gatling.io/cli: $GatlingVersion"
 } else {
     Log-Error "Nie znaleziono wpisu dla @gatling.io/cli w sekcji devDependencies w pliku package.json."
 }
 
-# Usuwanie prefiksu ^ z wersji
-$VersionTag = "v$($GatlingVersion.TrimStart('^'))"
-$FileName = "gatling-js-bundle-$($VersionTag)-Windows_NT-x64.zip"
+# Tworzenie URL do pobrania pliku
+$VersionTag = "v$GatlingVersion" # Tag z literą v
+$FileName = "gatling-js-bundle-$GatlingVersion-Windows_NT-x64.zip" # Bez litery v
 $DownloadUrl = "$BaseUrl/$VersionTag/$FileName"
 $OutputFilePath = Join-Path -Path $OutputDir -ChildPath $FileName
 
