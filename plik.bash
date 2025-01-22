@@ -10,7 +10,7 @@ log_error() {
   echo "[ERROR] $1" >&2
   exit 1
 }
-
+ s
 # Funkcja logowania informacji
 log_info() {
   echo "[INFO] $1"
