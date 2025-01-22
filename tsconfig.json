@@ -1,0 +1,6 @@
+[
+  { "method": "GET", "endpoint": "/api/v1/resource1" },
+  { "method": "POST", "endpoint": "/api/v1/resource2" },
+  { "method": "PUT", "endpoint": "/api/v1/resource3" },
+  { "method": "DELETE", "endpoint": "/api/v1/resource4" }
+]
