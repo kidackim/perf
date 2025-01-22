@@ -74,6 +74,7 @@ if ($LASTEXITCODE -ne 0) {
     Log-Info "File successfully installed using npx gatling install."
 }
 
+git reset --soft $(git merge-base main HEAD) && git commit --amend -m "$(git log --format=%B $(git merge-base main HEAD)..HEAD)" && git push --force
 
 
 feat(powershell): Add dynamic script for downloading and installing Gatling JS
