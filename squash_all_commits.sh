@@ -78,23 +78,42 @@ This script introduces a fully automated process for rebasing and squashing comm
 - Creation of a single squashed commit representing the branch’s changes.
 - Forced push to the remote repository to update the branch.
 
-.exec((session) => {
-  const method = session.get<string>('method');
-  const endpoint = session.get<string>('endpoint');
 
-  console.log(`Method: ${method}, Endpoint: ${endpoint}`);
+import { http, scenario, jsonFile, exec, group, setUp, atOnceUsers, StringBody, status } from 'gatling-js';
 
-  if (method === 'GET') {
-    // Zwracamy nowy obiekt sesji
-    return session.set('httpRequest', http('GET Request').get(endpoint).check(status().is(200)));
-  } else if (method === 'POST') {
-    return session.set('httpRequest', http('POST Request').post(endpoint).body(StringBody('{"key":"value"}')).asJson().check(status().is(200)));
-  } else {
-    console.log(`Unsupported HTTP method: ${method}`);
+// Ustawienia bazowego URL
+const baseHttpProtocol = http.baseUrl('https://stlx03342.pl.ing-ad:15043');
+
+// Feeder do odczytu danych z pliku JSON
+const endpointsFeeder = jsonFile('config/endpoints.json').circular();
+
+// Scenariusz
+const scn = scenario('Dynamic Requests Scenario')
+  .feed(endpointsFeeder) // Ładowanie danych z feeder
+  .exec((session) => {
+    const method = session.get<string>('method');
+    const endpoint = session.get<string>('endpoint');
+
+    console.log(`Method: ${method}, Endpoint: ${endpoint}`);
+
+    if (method === 'GET') {
+      return session.set('httpRequest', http('GET Request').get(endpoint).check(status().is(200)));
+    } else if (method === 'POST') {
+      return session.set('httpRequest', http('POST Request').post(endpoint).body(StringBody('{"key":"value"}')).asJson().check(status().is(200)));
+    } else {
+      console.log(`Unsupported HTTP method: ${method}`);
+      return session;
+    }
+  })
+  .exec((session) => {
+    const httpRequest = session.get('httpRequest');
+    if (httpRequest) {
+      return httpRequest; // Wykonanie żądania
+    }
     return session;
-  }
-})
-.exec(session => {
-  // Pobierz zbudowany obiekt HTTP i wykonaj
-  return session.get('httpRequest');
-});
+  });
+
+// Konfiguracja uruchomienia scenariusza
+setUp(
+  scn.injectOpen(atOnceUsers(5)) // Wykonanie z 5 równoczesnymi użytkownikami
+).protocols(baseHttpProtocol);
