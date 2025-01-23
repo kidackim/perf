@@ -63,3 +63,17 @@ echo "Pushowanie zmian..."
 git push --force
 
 echo "Squash zakończony i zmiany zostały wypchnięte."
+
+
+feat(script): automate rebase and squash process for Git branches
+
+This script introduces a fully automated process for rebasing and squashing commits on the current branch. It ensures clean Git history before merging with the main branch. Key features include:
+
+- Validation of the Git repository and main branch existence.
+- Synchronization with the remote `main` branch via `git fetch`.
+- Automatic handling of incomplete rebase sessions by aborting them if detected.
+- Conditional rebase or merge based on the synchronization status with `main`.
+- Soft reset of all commits to the staging area.
+- Consolidation of all commit messages into a single message, ignoring empty ones.
+- Creation of a single squashed commit representing the branch’s changes.
+- Forced push to the remote repository to update the branch.
