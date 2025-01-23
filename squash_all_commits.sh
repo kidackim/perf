@@ -77,3 +77,24 @@ This script introduces a fully automated process for rebasing and squashing comm
 - Consolidation of all commit messages into a single message, ignoring empty ones.
 - Creation of a single squashed commit representing the branch’s changes.
 - Forced push to the remote repository to update the branch.
+
+.exec((session) => {
+  const method = session.get<string>('method');
+  const endpoint = session.get<string>('endpoint');
+
+  console.log(`Method: ${method}, Endpoint: ${endpoint}`);
+
+  if (method === 'GET') {
+    // Zwracamy nowy obiekt sesji
+    return session.set('httpRequest', http('GET Request').get(endpoint).check(status().is(200)));
+  } else if (method === 'POST') {
+    return session.set('httpRequest', http('POST Request').post(endpoint).body(StringBody('{"key":"value"}')).asJson().check(status().is(200)));
+  } else {
+    console.log(`Unsupported HTTP method: ${method}`);
+    return session;
+  }
+})
+.exec(session => {
+  // Pobierz zbudowany obiekt HTTP i wykonaj
+  return session.get('httpRequest');
+});
