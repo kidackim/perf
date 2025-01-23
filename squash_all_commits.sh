@@ -1,38 +1,46 @@
-// Funkcja pomocnicza do dynamicznego generowania żądania
-const dynamicRequest = (session) => {
-  const method = session.get('method');
-  const endpoint = session.get('endpoint');
+import { scenario, http, feeders, StringBody, status, setUp, jsonFile, group } from '@gatling.io/http';
 
-  if (method === 'GET') {
-    return http('Dynamic GET Request')
-      .get(endpoint)
-      .check(status().is(200)); // Sprawdzenie statusu odpowiedzi
-  } else if (method === 'POST') {
-    return http('Dynamic POST Request')
-      .post(endpoint)
-      .body(StringBody('{"key":"value"}')).asJson() // Treść POST
-      .check(status().is(200)); // Sprawdzenie statusu odpowiedzi
-  } else {
-    console.error(`Unsupported HTTP method: ${method}`);
-    return null; // Zwraca null w przypadku nieobsługiwanej metody
-  }
-};
+export default simulation((setUp) => {
+  // Konfiguracja protokołu HTTP
+  const baseHttpProtocol = http.baseUrl('https://stlx03342.pl.ing-ad:15043');
 
-// Scenariusz testowy
-const scn = scenario('Dynamic Requests Scenario')
-  .feed(endpointsFeeder) // Ładowanie danych z feedera do sesji
-  .exec((session) => {
-    // Generowanie dynamicznego żądania na podstawie sesji
-    const request = dynamicRequest(session);
-    if (request) {
-      return request;
-    }
-    return session; // Jeśli brak requestu, zwracamy sesję bez akcji
-  });
+  // Dynamiczne dane z pliku JSON
+  const endpointsFeeder = jsonFile('config/endpoints.json').circular();
 
-// Konfiguracja uruchomienia scenariusza
-setUp(
-  scn.injectOpen(atOnceUsers(5)) // 5 równoczesnych użytkowników
-).protocols(
-  http.baseUrl('https://example.com') // Bazowy URL API
-);
+  // Scenariusz testowy
+  const scn = scenario('Dynamic Requests Scenario')
+    .feed(endpointsFeeder) // Ładowanie danych z pliku JSON
+    .exec(
+      group('Dynamic Request').on(
+        exec((session) => {
+          const method = session.get<string>('method');
+          const endpoint = session.get<string>('endpoint');
+          console.log(`Sending ${method} request to: ${endpoint}`);
+          return session; // Zwraca sesję
+        }),
+        exec((session) => {
+          const method = session.get<string>('method');
+          const endpoint = session.get<string>('endpoint');
+
+          // Obsługa GET i POST
+          if (method === 'GET') {
+            return http('GET Request')
+              .get(endpoint)
+              .check(status().is(200));
+          } else if (method === 'POST') {
+            return http('POST Request')
+              .post(endpoint)
+              .body(StringBody('{"key":"value"}')) // Treść żądania POST
+              .asJson()
+              .check(status().is(200));
+          } else {
+            console.error(`Unsupported HTTP method: ${method}`);
+            return session; // Brak akcji dla nieobsługiwanych metod
+          }
+        })
+      )
+    );
+
+  // Ustawienia symulacji
+  setUp(scn.injectOpen(atOnceUsers(5)).protocols(baseHttpProtocol));
+});
