@@ -1,42 +1,38 @@
-import { scenario, http, feeders, StringBody, status, setUp } from 'gatling';
+// Funkcja pomocnicza do dynamicznego generowania żądania
+const dynamicRequest = (session) => {
+  const method = session.get('method');
+  const endpoint = session.get('endpoint');
 
-// Feeder z dynamicznymi danymi
-const endpointsFeeder = feeders([
-  { method: 'GET', endpoint: '/api/resource1' },
-  { method: 'POST', endpoint: '/api/resource2' },
-]);
+  if (method === 'GET') {
+    return http('Dynamic GET Request')
+      .get(endpoint)
+      .check(status().is(200)); // Sprawdzenie statusu odpowiedzi
+  } else if (method === 'POST') {
+    return http('Dynamic POST Request')
+      .post(endpoint)
+      .body(StringBody('{"key":"value"}')).asJson() // Treść POST
+      .check(status().is(200)); // Sprawdzenie statusu odpowiedzi
+  } else {
+    console.error(`Unsupported HTTP method: ${method}`);
+    return null; // Zwraca null w przypadku nieobsługiwanej metody
+  }
+};
 
 // Scenariusz testowy
 const scn = scenario('Dynamic Requests Scenario')
   .feed(endpointsFeeder) // Ładowanie danych z feedera do sesji
-  .doIf((session) => session.get('method') === 'GET', // Warunek dla GET
-    exec(
-      http('GET Request')
-        .get((session) => session.get('endpoint')) // Pobranie dynamicznego endpointu
-        .check(status().is(200)) // Sprawdzenie statusu odpowiedzi
-    )
-  )
-  .doIf((session) => session.get('method') === 'POST', // Warunek dla POST
-    exec(
-      http('POST Request')
-        .post((session) => session.get('endpoint')) // Pobranie dynamicznego endpointu
-        .body(StringBody('{"key":"value"}')) // Treść żądania POST
-        .asJson() // Wskazanie typu JSON
-        .check(status().is(200)) // Sprawdzenie statusu odpowiedzi
-    )
-  )
-  .doIfOrElse( // Obsługa nieznanych metod
-    (session) => !['GET', 'POST'].includes(session.get('method')),
-    exec((session) => {
-      console.error(`Unsupported HTTP method: ${session.get('method')}`);
-      return session; // Zwrócenie sesji bez wykonania żądania
-    }),
-    exec((session) => session) // Wykonanie domyślnej akcji
-  );
+  .exec((session) => {
+    // Generowanie dynamicznego żądania na podstawie sesji
+    const request = dynamicRequest(session);
+    if (request) {
+      return request;
+    }
+    return session; // Jeśli brak requestu, zwracamy sesję bez akcji
+  });
 
 // Konfiguracja uruchomienia scenariusza
 setUp(
   scn.injectOpen(atOnceUsers(5)) // 5 równoczesnych użytkowników
 ).protocols(
-  http.baseUrl('https://example.com') // Ustawienie globalnego URL dla żądań
+  http.baseUrl('https://example.com') // Bazowy URL API
 );
