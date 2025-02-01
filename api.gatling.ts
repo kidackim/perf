@@ -1,6 +1,7 @@
-import { promises as fs } from "fs";
-import path from "path";
-import dotenv from "dotenv";
+const fs = require("fs").promises;
+const path = require("path");
+const dotenv = require("dotenv");
+const fetch = require("node-fetch");
 
 dotenv.config(); // Wczytaj zmienne środowiskowe
 
@@ -8,91 +9,67 @@ dotenv.config(); // Wczytaj zmienne środowiskowe
 const SCENARIO_FILE_PATH = path.resolve(__dirname, "../../resources/config/scenario.json");
 const ENV_FILE_PATH = path.resolve(__dirname, "../../../.env");
 
-// Definicja interfejsu dla danych logowania
-interface AuthCredentials {
-    baseUrl: string;
-    username: string;
-    password: string;
-}
-
-// Asynchroniczny odczyt pliku `scenario.json`
-const getAuthData = async (): Promise<AuthCredentials> => {
-    console.log("📂 Odczyt pliku scenario.json:", SCENARIO_FILE_PATH);
-
+// Pobieranie danych logowania
+const getAuthData = async () => {
     try {
+        console.log("📂 Odczyt pliku scenario.json:", SCENARIO_FILE_PATH);
         const rawData = await fs.readFile(SCENARIO_FILE_PATH, "utf-8");
-        console.log("📖 Odczytane dane z scenario.json:", rawData);
-
-        const jsonData: AuthCredentials = JSON.parse(rawData);
-        if (!jsonData.baseUrl || !jsonData.username || !jsonData.password) {
-            throw new Error("Brakuje wymaganych pól (`baseUrl`, `username`, `password`) w scenario.json");
-        }
-
-        return jsonData;
-    } catch (error: unknown) {
-        console.error("❌ Błąd odczytu scenario.json:", error instanceof Error ? error.message : error);
-        throw new Error("Nie można wczytać pliku scenario.json");
+        return JSON.parse(rawData);
+    } catch (error) {
+        console.error("❌ Błąd odczytu scenario.json:", error);
+        return null;
     }
 };
 
-// Pobieranie tokena z API
-const fetchToken = async (baseUrl: string, username: string, password: string): Promise<string> => {
-    console.log(`🔄 Pobieranie tokena z: ${baseUrl}/auth`);
-    console.log(`👤 Użytkownik: ${username}`);
-
+// Pobieranie tokena
+const fetchToken = async (baseUrl: string, username: string, password: string) => {
     try {
+        console.log(`🔄 Pobieranie tokena z: ${baseUrl}/auth`);
         const response = await fetch(`${baseUrl}/auth`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ username, password }),
         });
 
-        if (!response.ok) {
-            throw new Error(`Błąd pobierania tokena: ${response.statusText}`);
-        }
-
+        if (!response.ok) throw new Error(`Błąd pobierania tokena: ${response.statusText}`);
         const data = await response.json();
         console.log("✅ Token pobrany:", data.access_token);
-
         return data.access_token;
-    } catch (error: unknown) {
-        console.error("❌ Błąd podczas pobierania tokena:", error instanceof Error ? error.message : error);
-        throw new Error("Nie udało się pobrać tokena");
+    } catch (error) {
+        console.error("❌ Błąd pobierania tokena:", error);
+        return null;
     }
 };
 
 // Zapisywanie tokena do `.env`
-const saveTokenToEnv = async (token: string): Promise<void> => {
+const saveTokenToEnv = async (token: string) => {
     try {
         const envContent = `TOKEN="${token}"\n`;
         console.log("📝 Zapis do pliku .env:", envContent);
         await fs.writeFile(ENV_FILE_PATH, envContent, "utf-8");
-
         console.log(`✅ Token zapisany do ${ENV_FILE_PATH}`);
-
-        // Dodatkowa walidacja – odczytaj plik po zapisie
-        const checkContent = await fs.readFile(ENV_FILE_PATH, "utf-8");
-        console.log("🔍 Zawartość pliku .env po zapisie:", checkContent);
-    } catch (error: unknown) {
-        console.error("❌ Błąd zapisu do .env:", error instanceof Error ? error.message : error);
-        throw new Error("Nie udało się zapisać tokena do .env");
+    } catch (error) {
+        console.error("❌ Błąd zapisu do .env:", error);
     }
 };
 
 // Główna funkcja wykonawcza
-export const fetchAndSaveToken = async (): Promise<void> => {
+const fetchAndSaveToken = async () => {
     console.log("🚀 Uruchamianie `auth.ts`...");
+    const authData = await getAuthData();
+    if (!authData) return;
 
-    try {
-        const { baseUrl, username, password } = await getAuthData();
-        const token = await fetchToken(baseUrl, username, password);
-        await saveTokenToEnv(token);
-    } catch (error: unknown) {
-        console.error("⚠️ Błąd:", error instanceof Error ? error.message : error);
-    }
+    const { baseUrl, username, password } = authData;
+    const token = await fetchToken(baseUrl, username, password);
+    if (!token) return;
+
+    await saveTokenToEnv(token);
 };
 
-// ✅ Zastosowanie dynamicznego importu, aby uniknąć cyklicznych importów
-if (import.meta.url === `file://${process.argv[1]}`) {
+// Uruchamianie tylko, jeśli plik jest uruchamiany bezpośrednio
+if (require.main === module) {
     fetchAndSaveToken();
 }
+
+// Eksport funkcji (dla innych plików)
+module.exports = { fetchAndSaveToken };
