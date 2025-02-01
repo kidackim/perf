@@ -28,8 +28,12 @@ const getAuthData = async (): Promise<AuthCredentials> => {
         }
 
         return jsonData;
-    } catch (error) {
-        console.error("❌ Błąd odczytu scenario.json:", error);
+    } catch (error: unknown) {
+        if (error instanceof Error) {
+            console.error("❌ Błąd odczytu scenario.json:", error.message);
+        } else {
+            console.error("❌ Nieznany błąd odczytu scenario.json:", error);
+        }
         throw new Error("Nie można wczytać pliku scenario.json");
     }
 };
@@ -54,8 +58,12 @@ const fetchToken = async (baseUrl: string, username: string, password: string): 
         console.log("✅ Token pobrany:", data.access_token);
 
         return data.access_token;
-    } catch (error) {
-        console.error("❌ Błąd podczas pobierania tokena:", error);
+    } catch (error: unknown) {
+        if (error instanceof Error) {
+            console.error("❌ Błąd podczas pobierania tokena:", error.message);
+        } else {
+            console.error("❌ Nieznany błąd pobierania tokena:", error);
+        }
         throw new Error("Nie udało się pobrać tokena");
     }
 };
@@ -72,8 +80,12 @@ const saveTokenToEnv = async (token: string): Promise<void> => {
         // Dodatkowa walidacja – odczytaj plik po zapisie
         const checkContent = await fs.readFile(ENV_FILE_PATH, "utf-8");
         console.log("🔍 Zawartość pliku .env po zapisie:", checkContent);
-    } catch (error) {
-        console.error("❌ Błąd zapisu do .env:", error);
+    } catch (error: unknown) {
+        if (error instanceof Error) {
+            console.error("❌ Błąd zapisu do .env:", error.message);
+        } else {
+            console.error("❌ Nieznany błąd zapisu do .env:", error);
+        }
         throw new Error("Nie udało się zapisać tokena do .env");
     }
 };
@@ -86,7 +98,11 @@ export const fetchAndSaveToken = async (): Promise<void> => {
         const { baseUrl, username, password } = await getAuthData();
         const token = await fetchToken(baseUrl, username, password);
         await saveTokenToEnv(token);
-    } catch (error) {
-        console.error("⚠️ Błąd: ", error.message);
+    } catch (error: unknown) {
+        if (error instanceof Error) {
+            console.error("⚠️ Błąd:", error.message);
+        } else {
+            console.error("⚠️ Nieznany błąd:", error);
+        }
     }
 };
