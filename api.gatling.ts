@@ -15,30 +15,27 @@ interface AuthCredentials {
     password: string;
 }
 
-// Funkcja asynchroniczna do odczytu danych logowania z `scenario.json`
+// Asynchroniczny odczyt pliku `scenario.json`
 const getAuthData = async (): Promise<AuthCredentials> => {
     console.log("📂 Odczyt pliku scenario.json:", SCENARIO_FILE_PATH);
 
     try {
         const rawData = await fs.readFile(SCENARIO_FILE_PATH, "utf-8");
-        const jsonData: AuthCredentials = JSON.parse(rawData);
+        console.log("📖 Odczytane dane z scenario.json:", rawData);
 
+        const jsonData: AuthCredentials = JSON.parse(rawData);
         if (!jsonData.baseUrl || !jsonData.username || !jsonData.password) {
             throw new Error("Brakuje wymaganych pól (`baseUrl`, `username`, `password`) w scenario.json");
         }
 
         return jsonData;
     } catch (error: unknown) {
-        if (error instanceof Error) {
-            console.error("❌ Błąd odczytu scenario.json:", error.message);
-        } else {
-            console.error("❌ Nieznany błąd odczytu scenario.json:", error);
-        }
+        console.error("❌ Błąd odczytu scenario.json:", error instanceof Error ? error.message : error);
         throw new Error("Nie można wczytać pliku scenario.json");
     }
 };
 
-// Funkcja do pobrania tokena z API
+// Pobieranie tokena z API
 const fetchToken = async (baseUrl: string, username: string, password: string): Promise<string> => {
     console.log(`🔄 Pobieranie tokena z: ${baseUrl}/auth`);
     console.log(`👤 Użytkownik: ${username}`);
@@ -59,16 +56,12 @@ const fetchToken = async (baseUrl: string, username: string, password: string): 
 
         return data.access_token;
     } catch (error: unknown) {
-        if (error instanceof Error) {
-            console.error("❌ Błąd podczas pobierania tokena:", error.message);
-        } else {
-            console.error("❌ Nieznany błąd pobierania tokena:", error);
-        }
+        console.error("❌ Błąd podczas pobierania tokena:", error instanceof Error ? error.message : error);
         throw new Error("Nie udało się pobrać tokena");
     }
 };
 
-// Funkcja zapisująca token do `.env`
+// Zapisywanie tokena do `.env`
 const saveTokenToEnv = async (token: string): Promise<void> => {
     try {
         const envContent = `TOKEN="${token}"\n`;
@@ -81,11 +74,7 @@ const saveTokenToEnv = async (token: string): Promise<void> => {
         const checkContent = await fs.readFile(ENV_FILE_PATH, "utf-8");
         console.log("🔍 Zawartość pliku .env po zapisie:", checkContent);
     } catch (error: unknown) {
-        if (error instanceof Error) {
-            console.error("❌ Błąd zapisu do .env:", error.message);
-        } else {
-            console.error("❌ Nieznany błąd zapisu do .env:", error);
-        }
+        console.error("❌ Błąd zapisu do .env:", error instanceof Error ? error.message : error);
         throw new Error("Nie udało się zapisać tokena do .env");
     }
 };
@@ -99,10 +88,11 @@ export const fetchAndSaveToken = async (): Promise<void> => {
         const token = await fetchToken(baseUrl, username, password);
         await saveTokenToEnv(token);
     } catch (error: unknown) {
-        if (error instanceof Error) {
-            console.error("⚠️ Błąd:", error.message);
-        } else {
-            console.error("⚠️ Nieznany błąd:", error);
-        }
+        console.error("⚠️ Błąd:", error instanceof Error ? error.message : error);
     }
 };
+
+// ✅ Zastosowanie dynamicznego importu, aby uniknąć cyklicznych importów
+if (import.meta.url === `file://${process.argv[1]}`) {
+    fetchAndSaveToken();
+}
