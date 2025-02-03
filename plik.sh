@@ -1,21 +1,3 @@
-const fs = require('fs');
-const path = require('path');
-
-function loadEnv() {
-    const envPath = path.resolve(__dirname, '.env');
-    if (!fs.existsSync(envPath)) {
-        console.error('.env file not found!');
-        process.exit(1);
-    }
-
-    const envData = fs.readFileSync(envPath, 'utf-8');
-    envData.split('\n').forEach(line => {
-        const [key, value] = line.split('=');
-        if (key && value) {
-            process.env[key.trim()] = value.trim();
-        }
-    });
+"scripts": {
+  "test": "powershell -Command \"node auth.ts; Get-Content .env | ForEach-Object { $name, $value = $_ -split '=', 2; Set-Item -Path env:\\$name -Value $value.Trim('\"') }; npx gatling-js run --typescript\""
 }
-
-// Wczytaj zmienne do systemu
-loadEnv();
