@@ -1,24 +1,21 @@
-import fs from 'fs';
-import dotenv from 'dotenv';
+const fs = require('fs');
+const path = require('path');
 
-dotenv.config(); // Załaduj istniejące zmienne z .env
-
-async function getAccessToken() {
-    // Pobierz token z API
-    const accessToken = "przykładowy_token"; // tutaj Twój kod do pobierania tokena
-
-    // Wczytaj obecne zmienne
-    const envPath = '.env';
-    let envContent = fs.readFileSync(envPath, 'utf8');
-
-    // Jeśli TOKEN już istnieje, zastąp jego wartość, jeśli nie – dodaj nową linię
-    if (/^TOKEN=/m.test(envContent)) {
-        envContent = envContent.replace(/^TOKEN=.*/m, `TOKEN="${accessToken}"`);
-    } else {
-        envContent += `\nTOKEN="${accessToken}"\n`;
+function loadEnv() {
+    const envPath = path.resolve(__dirname, '.env');
+    if (!fs.existsSync(envPath)) {
+        console.error('.env file not found!');
+        process.exit(1);
     }
 
-    fs.writeFileSync(envPath, envContent, 'utf8'); // Nadpisz plik .env
+    const envData = fs.readFileSync(envPath, 'utf-8');
+    envData.split('\n').forEach(line => {
+        const [key, value] = line.split('=');
+        if (key && value) {
+            process.env[key.trim()] = value.trim();
+        }
+    });
 }
 
-getAccessToken();
+// Wczytaj zmienne do systemu
+loadEnv();
