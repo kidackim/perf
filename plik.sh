@@ -1,3 +1,6 @@
-"scripts": {
-  "test": "powershell -Command \"node auth.ts; Get-Content .env | ForEach-Object { $name, $value = $_ -split '=', 2; Set-Item -Path env:\\$name -Value $value.Trim('\"') }; npx gatling-js run --typescript\""
-}
+- Added a test to verify the POST /tokens/info endpoint.
+- Introduced an authentication mechanism that fetches an access token from Keycloak before test execution.
+- The access token is stored in the .env file, ensuring reusability across multiple test scenarios.
+- Updated Bash command to read all .env variables and set them as system environment variables.
+- Ensured Gatling has access to authentication credentials without modifying individual test scenarios.
+- Decoupled authentication logic from the test scenario for better maintainability and reusability.
