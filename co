@@ -1,9 +1,12 @@
-function mapToJson(map: Map<any, any>): Record<string, any> {
-    const obj: Record<string, any> = {};
-
-    for (const [key, value] of Array.from(map)) {
-        obj[String(key)] = value instanceof Map ? mapToJson(value) : value;
+function byteArrayToJsonString(byteArray: Uint8Array): string {
+    // Konwersja tablicy bajtów na Base64 string
+    let base64String = "";
+    for (let i = 0; i < byteArray.length; i++) {
+        base64String += String.fromCharCode(byteArray[i]);
     }
 
-    return obj;
+    // Dekodowanie Base64 do JSON string
+    const jsonString = base64.decode(base64String);
+
+    return jsonString; // Zwraca JSON jako string
 }
