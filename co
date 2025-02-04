@@ -1,25 +1,27 @@
+class User {
+    customerInfoPath: string;
+    payloadPath: string;
+
+    private constructor(customerInfo: string, payload: string) {
+        this.customerInfoPath = customerInfo;
+        this.payloadPath = payload;
+    }
+
+    // Metoda zwracająca obiekt z danymi użytkownika
+    getInfo(): { customerInfoPath: string; payloadPath: string } {
+        return {
+            customerInfoPath: this.customerInfoPath,
+            payloadPath: this.payloadPath
+        };
+    }
+
+    // Statyczna lista predefiniowanych użytkowników
+    static First = new User("users_1/customer_info.json", "users_1/bodyInfoRequest");
+    static Second = new User("users_2/customer_info.json", "users_2/bodyInfoRequest");
+    static Third = new User("users_3/customer_info.json", "users_3/bodyInfoRequest");
+}
+
+// Klasa `Users`, która zawiera wewnętrznie zdefiniowanych użytkowników
 class Users {
-    // Wewnętrzna klasa reprezentująca pojedynczego użytkownika
-    static User = class {
-        customerInfoPath: string;
-        payloadPath: string;
-
-        private constructor(customerInfo: string, payload: string) {
-            this.customerInfoPath = customerInfo;
-            this.payloadPath = payload;
-        }
-
-        // Metoda zwracająca obiekt z danymi użytkownika
-        getInfo(): { customerInfoPath: string; payloadPath: string } {
-            return {
-                customerInfoPath: this.customerInfoPath,
-                payloadPath: this.payloadPath
-            };
-        }
-
-        // Statyczna lista predefiniowanych użytkowników
-        static First = new this("users_1/customer_info.json", "users_1/bodyInfoRequest");
-        static Second = new this("users_2/customer_info.json", "users_2/bodyInfoRequest");
-        static Third = new this("users_3/customer_info.json", "users_3/bodyInfoRequest");
-    };
+    static User = User; // Powiązanie klasy `User` z `Users`
 }
