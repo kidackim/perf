@@ -1,27 +1,4 @@
-class User {
-    customerInfoPath: string;
-    payloadPath: string;
-
-    private constructor(customerInfo: string, payload: string) {
-        this.customerInfoPath = customerInfo;
-        this.payloadPath = payload;
-    }
-
-    // Metoda zwracająca obiekt z danymi użytkownika
-    getInfo(): { customerInfoPath: string; payloadPath: string } {
-        return {
-            customerInfoPath: this.customerInfoPath,
-            payloadPath: this.payloadPath
-        };
-    }
-
-    // Statyczna lista predefiniowanych użytkowników
-    static First = new User("users_1/customer_info.json", "users_1/bodyInfoRequest");
-    static Second = new User("users_2/customer_info.json", "users_2/bodyInfoRequest");
-    static Third = new User("users_3/customer_info.json", "users_3/bodyInfoRequest");
-}
-
-// Klasa `Users`, która zawiera wewnętrznie zdefiniowanych użytkowników
-class Users {
-    static User = User; // Powiązanie klasy `User` z `Users`
-}
+- Introduced parameterization for each step in the scenario to enhance flexibility.
+- Improved value propagation across steps for better data handling.
+- Implemented a dynamic mechanism to identify `customer_info` based on the selected user.
+- Added the `Users` class to manage user-specific data and streamline test execution.
