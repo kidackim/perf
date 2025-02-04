@@ -1,6 +1,9 @@
 function mapToJson(map: Map<any, any>): Record<string, any> {
-    return Object.fromEntries(Array.from(map.entries()).map(([key, value]) => [
-        String(key), // Konwersja klucza na string
-        value instanceof Map ? mapToJson(value) : value // Rekurencyjna konwersja zagnieżdżonych Map
-    ]));
+    const obj: Record<string, any> = {};
+
+    for (const [key, value] of Array.from(map)) {
+        obj[String(key)] = value instanceof Map ? mapToJson(value) : value;
+    }
+
+    return obj;
 }
