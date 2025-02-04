@@ -1,1 +1,9 @@
 
+function mapToPlainObject(map: Map<any, any>): any {
+    if (!(map instanceof Map)) return map; // Jeśli to nie jest mapa, zwróć wartość
+
+    return Array.from(map.entries()).reduce((obj, [key, value]) => {
+        obj[String(key)] = mapToPlainObject(value); // Konwersja kluczy do stringa
+        return obj;
+    }, {} as Record<string, any>);
+}
