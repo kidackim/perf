@@ -1,9 +1,18 @@
+// Ręczna konwersja do JSON w postaci stringa
+function mapToJsonString(map: Map<any, any>): string {
+    let obj: Record<string, any> = {};
 
-function mapToPlainObject(map: Map<any, any>): any {
-    if (!(map instanceof Map)) return map; // Jeśli to nie jest mapa, zwróć wartość
+    for (let [key, value] of map) {
+        let formattedKey = typeof key === "string" ? `"${key}"` : `"${String(key)}"`;
+        let formattedValue = value instanceof Map
+            ? mapToJsonString(value) // Rekurencyjnie konwertuj zagnieżdżoną Map
+            : typeof value === "string"
+                ? `"${value}"` // Jeśli string, opakuj w cudzysłów
+                : value; // Wartości liczbowe i inne pozostaw
 
-    return Array.from(map.entries()).reduce((obj, [key, value]) => {
-        obj[String(key)] = mapToPlainObject(value); // Konwersja kluczy do stringa
-        return obj;
-    }, {} as Record<string, any>);
+        obj[formattedKey] = formattedValue;
+    }
+
+    // Konwersja do stringa i poprawna składnia JSON
+    return `{${Object.entries(obj).map(([k, v]) => `${k}:${v}`).join(",")}}`;
 }
