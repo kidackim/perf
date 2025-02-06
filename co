@@ -1,4 +1,17 @@
-- Introduced parameterization for each step in the scenario to enhance flexibility.
-- Improved value propagation across steps for better data handling.
-- Implemented a dynamic mechanism to identify `customer_info` based on the selected user.
-- Added the `Users` class to manage user-specific data and streamline test execution.
+- name: Clean project directory on Windows
+  hosts: windows
+  tasks:
+    - name: Pobierz listę plików i katalogów w bieżącym folderze (bez node_modules i package.json)
+      win_shell: |
+        Get-ChildItem -Path "C:\ścieżka\do\projektu" -Exclude "node_modules", "package.json" | Select-Object -ExpandProperty FullName
+      register: files_to_delete
+
+    - name: Wyświetl pliki do usunięcia (debug)
+      debug:
+        msg: "{{ files_to_delete.stdout_lines }}"
+
+    - name: Usunięcie plików i katalogów oprócz node_modules i package.json
+      win_file:
+        path: "{{ item }}"
+        state: absent
+      loop: "{{ files_to_delete.stdout_lines }}"
