@@ -1,3 +1,13 @@
+// Access Gatling as a global object
+const gatling = (global as any).Gatling;
+
+// 1. Define Config interface
+interface Config {
+  endpoint: string;
+  apiKey: string;
+  //... other properties
+}
+
 // 2. Load config function
 function loadConfig(): Config {
   const JavaFile = Java.type('java.io.File');
@@ -8,21 +18,21 @@ function loadConfig(): Config {
     const file = new JavaFile(gatling.core.Predef.configuration.core().resourcesDirectory(), "config.json");
     const fr = new JavaFileReader(file);
     const br = new JavaBufferedReader(fr);
-    let line: string | null; // line can be null
+    let line: string | null;
     let jsonString = "";
 
-    while ((line = br.readLine()) !== null) { // strict null check
+    while ((line = br.readLine())!== null) {
       jsonString += line;
     }
 
     br.close();
     fr.close();
 
-    const config = JSON.parse(jsonString) as Config; // Type assertion after parsing
+    const config = JSON.parse(jsonString) as Config;
     return config;
 
   } catch (e) {
     console.error("Error loading or parsing JSON:", e);
-    throw e; // Re-throw to stop the simulation
+    throw e;
   }
 }
