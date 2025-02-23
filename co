@@ -19,3 +19,26 @@ function loadConfig() {
 
   return config;
 }
+
+
+
+// java.d.ts
+declare namespace java {
+  namespace io {
+    class File {
+      constructor(pathname: string);
+      constructor(parent: string, child: string);
+      getPath(): string;
+    }
+    class FileReader {
+      constructor(file: java.io.File);
+      close(): void;
+    }
+    class BufferedReader {
+      constructor(reader: java.io.Reader);
+      readLine(): string | null;
+      close(): void;
+    }
+    interface Reader {}
+  }
+}
