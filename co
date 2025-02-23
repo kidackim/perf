@@ -1,44 +1,28 @@
-function loadConfig() {
-  // Gatling.instance jest dostępne w scenariuszach Gatling-js
-  const file = new java.io.File(gatling.core.Predef.configuration.core().resourcesDirectory(), "config.json");
-  const fr = new java.io.FileReader(file);
-  const br = new java.io.BufferedReader(fr);
-  let line;
-  let jsonString = "";
+// 2. Load config function
+function loadConfig(): Config {
+  const JavaFile = Java.type('java.io.File');
+  const JavaFileReader = Java.type('java.io.FileReader');
+  const JavaBufferedReader = Java.type('java.io.BufferedReader');
 
-  while ((line = br.readLine()) != null) {
-    jsonString += line;
-  }
+  try {
+    const file = new JavaFile(gatling.core.Predef.configuration.core().resourcesDirectory(), "config.json");
+    const fr = new JavaFileReader(file);
+    const br = new JavaBufferedReader(fr);
+    let line: string | null; // line can be null
+    let jsonString = "";
 
-  br.close();
-  fr.close();
-
-  // Używamy eval do parsowania JSON-a w Rhino (ostrożnie z tym!)
-  // Alternatywnie, można użyć biblioteki JSON parsera dodanej jako zależność projektu
-  const config = eval("(" + jsonString + ")"); // PARSOWANIE JSON!
-
-  return config;
-}
-
-
-
-// java.d.ts
-declare namespace java {
-  namespace io {
-    class File {
-      constructor(pathname: string);
-      constructor(parent: string, child: string);
-      getPath(): string;
+    while ((line = br.readLine()) !== null) { // strict null check
+      jsonString += line;
     }
-    class FileReader {
-      constructor(file: java.io.File);
-      close(): void;
-    }
-    class BufferedReader {
-      constructor(reader: java.io.Reader);
-      readLine(): string | null;
-      close(): void;
-    }
-    interface Reader {}
+
+    br.close();
+    fr.close();
+
+    const config = JSON.parse(jsonString) as Config; // Type assertion after parsing
+    return config;
+
+  } catch (e) {
+    console.error("Error loading or parsing JSON:", e);
+    throw e; // Re-throw to stop the simulation
   }
 }
