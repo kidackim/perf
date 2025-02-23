@@ -1,17 +1,21 @@
-- name: Clean project directory on Windows
-  hosts: windows
-  tasks:
-    - name: Pobierz listę plików i katalogów w bieżącym folderze (bez node_modules i package.json)
-      win_shell: |
-        Get-ChildItem -Path "C:\ścieżka\do\projektu" -Exclude "node_modules", "package.json" | Select-Object -ExpandProperty FullName
-      register: files_to_delete
+function loadConfig() {
+  // Gatling.instance jest dostępne w scenariuszach Gatling-js
+  const file = new java.io.File(gatling.core.Predef.configuration.core().resourcesDirectory(), "config.json");
+  const fr = new java.io.FileReader(file);
+  const br = new java.io.BufferedReader(fr);
+  let line;
+  let jsonString = "";
 
-    - name: Wyświetl pliki do usunięcia (debug)
-      debug:
-        msg: "{{ files_to_delete.stdout_lines }}"
+  while ((line = br.readLine()) != null) {
+    jsonString += line;
+  }
 
-    - name: Usunięcie plików i katalogów oprócz node_modules i package.json
-      win_file:
-        path: "{{ item }}"
-        state: absent
-      loop: "{{ files_to_delete.stdout_lines }}"
+  br.close();
+  fr.close();
+
+  // Używamy eval do parsowania JSON-a w Rhino (ostrożnie z tym!)
+  // Alternatywnie, można użyć biblioteki JSON parsera dodanej jako zależność projektu
+  const config = eval("(" + jsonString + ")"); // PARSOWANIE JSON!
+
+  return config;
+}
