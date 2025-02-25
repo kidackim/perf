@@ -1,38 +1,25 @@
-// java.d.ts (MODYFIKUJEMY ISTNIEJĄCY PLIK)
+   // --- "GLOBALNY" SETUP (używający Java interop) ---
+    const System = Java.type('java.lang.System');
 
-declare namespace java { // Zostawiamy istniejącą przestrzeń nazw
-    namespace io { // Zostawiamy istniejącą przestrzeń nazw
-        class File {
-            constructor(pathname: string);
-            constructor(parent: string, child: string);
-            getPath(): string;
+    if (System.getProperty('gatling.setup.done') === null) {
+        console.log("Wykonuję globalny setup...");
+
+        const setupScenario = scenario('Setup')
+            .exec(setupStep1(Users.User.Second)) // Krok 1
+            .exec(setupStep2(Users.User.Second)) // Krok 2 (zapis do sesji)
+            .exec(session => {
+                const authRef = session.get('authorizationReference') as string;
+                System.setProperty('gatling.authorizationReference', authRef); // Zapis do właściwości systemowej
+                return session;
+            });
+          // "Sztuczny" setup i synchroniczne wykonanie
+        const tempSetup = () => {
+          setUp(setupScenario.inject(atOnceUsers(1)).protocols(httpProtocol))
         }
+        tempSetup();
 
-        class FileReader {
-            constructor(file: java.io.File);
-            close(): void;
-        }
-
-        class BufferedReader {
-            constructor(reader: java.io.Reader);
-            readLine(): string | null;
-            close(): void;
-        }
-
-        interface Reader { }
+        System.setProperty('gatling.setup.done', 'true');
+        console.log("Globalny setup zakończony.");
+    } else {
+        console.log("Globalny setup już wykonany, pomijam.");
     }
-
-    namespace lang { // Dodajemy przestrzeń nazw 'lang'
-        class System { // Dodajemy klasę System
-            static getProperty(key: string): string | null;
-            static setProperty(key: string, value: string): string | null;
-        }
-    }
-}
-
-
-// Rozszerzamy globalny interfejs, dodając System
-declare global {
-  var System: java.lang.System; // Teraz odwołujemy się do java.lang.System
-  var Java: { type(className: string): any }; //Deklaracja dla Java
-}
