@@ -1,38 +1,38 @@
-// Access Gatling as a global object
-const gatling = (global as any).Gatling;
+// java.d.ts (MODYFIKUJEMY ISTNIEJĄCY PLIK)
 
-// 1. Define Config interface
-interface Config {
-  endpoint: string;
-  apiKey: string;
-  //... other properties
-}
+declare namespace java { // Zostawiamy istniejącą przestrzeń nazw
+    namespace io { // Zostawiamy istniejącą przestrzeń nazw
+        class File {
+            constructor(pathname: string);
+            constructor(parent: string, child: string);
+            getPath(): string;
+        }
 
-// 2. Load config function
-function loadConfig(): Config {
-  const JavaFile = Java.type('java.io.File');
-  const JavaFileReader = Java.type('java.io.FileReader');
-  const JavaBufferedReader = Java.type('java.io.BufferedReader');
+        class FileReader {
+            constructor(file: java.io.File);
+            close(): void;
+        }
 
-  try {
-    const file = new JavaFile(gatling.core.Predef.configuration.core().resourcesDirectory(), "config.json");
-    const fr = new JavaFileReader(file);
-    const br = new JavaBufferedReader(fr);
-    let line: string | null;
-    let jsonString = "";
+        class BufferedReader {
+            constructor(reader: java.io.Reader);
+            readLine(): string | null;
+            close(): void;
+        }
 
-    while ((line = br.readLine())!== null) {
-      jsonString += line;
+        interface Reader { }
     }
 
-    br.close();
-    fr.close();
+    namespace lang { // Dodajemy przestrzeń nazw 'lang'
+        class System { // Dodajemy klasę System
+            static getProperty(key: string): string | null;
+            static setProperty(key: string, value: string): string | null;
+        }
+    }
+}
 
-    const config = JSON.parse(jsonString) as Config;
-    return config;
 
-  } catch (e) {
-    console.error("Error loading or parsing JSON:", e);
-    throw e;
-  }
+// Rozszerzamy globalny interfejs, dodając System
+declare global {
+  var System: java.lang.System; // Teraz odwołujemy się do java.lang.System
+  var Java: { type(className: string): any }; //Deklaracja dla Java
 }
