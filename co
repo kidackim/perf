@@ -1,25 +1,11 @@
-   // --- "GLOBALNY" SETUP (używający Java interop) ---
-    const System = Java.type('java.lang.System');
-
-    if (System.getProperty('gatling.setup.done') === null) {
-        console.log("Wykonuję globalny setup...");
-
-        const setupScenario = scenario('Setup')
-            .exec(setupStep1(Users.User.Second)) // Krok 1
-            .exec(setupStep2(Users.User.Second)) // Krok 2 (zapis do sesji)
-            .exec(session => {
-                const authRef = session.get('authorizationReference') as string;
-                System.setProperty('gatling.authorizationReference', authRef); // Zapis do właściwości systemowej
-                return session;
-            });
-          // "Sztuczny" setup i synchroniczne wykonanie
-        const tempSetup = () => {
-          setUp(setupScenario.inject(atOnceUsers(1)).protocols(httpProtocol))
-        }
-        tempSetup();
-
-        System.setProperty('gatling.setup.done', 'true');
-        console.log("Globalny setup zakończony.");
-    } else {
-        console.log("Globalny setup już wykonany, pomijam.");
+declare namespace GatlingJavaExtensions {
+    interface System {
+        getProperty(key: string): string | null;
+        setProperty(key: string, value: string): string | null;
     }
+}
+
+declare global {
+    var GatlingJavaSystem: GatlingJavaExtensions.System;
+    var Java: { type(className: string): any }; //Jeśli używasz Java.type gdzie indziej
+}
