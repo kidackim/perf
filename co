@@ -1,11 +1,6 @@
-declare namespace GatlingJavaExtensions {
-    interface System {
-        getProperty(key: string): string | null;
-        setProperty(key: string, value: string): string | null;
-    }
-}
+feat(gatling-js): Implement Java interop for setup and refactor URLs/scenarios
 
-declare global {
-    var GatlingJavaSystem: GatlingJavaExtensions.System;
-    var Java: { type(className: string): any }; //Jeśli używasz Java.type gdzie indziej
-}
+- Implemented Java interop via GraalVM to execute setup code before scenarios.
+- Refactored URLs to be stored as global variables (using .env.json).
+- Refactored test scenarios for explicit test data and assertions.
+- Prepared project structure for future work on a `before` hook equivalent.
