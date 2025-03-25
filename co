@@ -1,6 +1,175 @@
-feat(gatling-js): Implement Java interop for setup and refactor URLs/scenarios
+ 
 
-- Implemented Java interop via GraalVM to execute setup code before scenarios.
-- Refactored URLs to be stored as global variables (using .env.json).
-- Refactored test scenarios for explicit test data and assertions.
-- Prepared project structure for future work on a `before` hook equivalent.
+ 
+5 Modeli Testów Wydajnościowych dla Gatling-ts
+Przygotowanie różnorodnych modeli testów wydajnościowych jest kluczowe dla kompleksowej oceny kondycji systemu. Poniżej przedstawiam 5 różnych modeli symulacji dla gatling-ts, które pozwolą na wszechstronną weryfikację wydajności aplikacji w różnych warunkach obciążenia.
+Model Bazowy (Load Testing)
+Model bazowy służy do weryfikacji zachowania systemu przy normalnym, oczekiwanym obciążeniu i stanowi punkt odniesienia dla pozostałych testów.
+Dlaczego warto stosować?
+Ten model pozwala wykryć podstawowe problemy wydajnościowe, które występują przy normalnym użytkowaniu systemu, takie jak niewłaściwe równoważenie obciążenia, niska przepustowość czy zbyt długi czas odpowiedzi[1]. Jest to fundament wszystkich testów wydajnościowych.
+Implementacja w gatling-ts
+import { simulation, scenario, exec, constantConcurrentUsers } from "@gatling.io/core";
+import { http } from "@gatling.io/http";
+
+export default simulation((setUp) => {
+  const httpProtocol = http
+    .baseUrl("http://twojsystem.pl")
+    .acceptHeader("application/json");
+
+  // Tutaj zaimportuj swój przygotowany scenariusz
+  const mojScenariusz = scenario("Scenariusz Bazowy").exec(/* kroki scenariusza */);
+
+  setUp(
+    // Model zamknięty - utrzymuje stałą liczbę 10 jednoczesnych użytkowników przez 10 minut
+    mojScenariusz.injectClosed(
+      constantConcurrentUsers(10).during(600)
+    )
+  ).protocols(httpProtocol)
+   .assertions(
+     // Przykładowe asercje
+     global().responseTime().percentile(95).lt(800),
+     global().successfulRequests().percent().gt(95)
+   );
+});
+
+Ten model utrzymuje stałą liczbę 10 jednoczesnych użytkowników przez 10 minut, co pozwala ocenić zachowanie systemu przy normalnym, przewidywalnym obciążeniu[2][3].
+Model Stopniowego Wzrostu (Ramp-up Testing)
+Model stopniowego wzrostu symuluje systematyczne zwiększanie liczby użytkowników w określonym czasie, co pozwala zidentyfikować punkt, w którym wydajność zaczyna się pogarszać.
+Dlaczego warto stosować?
+Ten model doskonale symuluje scenariusz stopniowego wzrostu popularności aplikacji. Pozwala wykryć problemy ze skalowalnością i określić, przy jakiej liczbie jednoczesnych użytkowników system zaczyna tracić na wydajności[4]. Jest to niezbędne dla określenia limitów systemu i planowania zasobów.
+Implementacja w gatling-ts
+import { simulation, scenario, exec, rampUsers } from "@gatling.io/core";
+import { http } from "@gatling.io/http";
+
+export default simulation((setUp) => {
+  const httpProtocol = http
+    .baseUrl("http://twojsystem.pl")
+    .acceptHeader("application/json");
+
+  const mojScenariusz = scenario("Scenariusz Ramp-up").exec(/* kroki scenariusza */);
+
+  setUp(
+    // Model otwarty - stopniowo zwiększa liczbę użytkowników od 1 do 100 w ciągu 10 minut
+    mojScenariusz.injectOpen(
+      rampUsers(100).during(600)
+    )
+  ).protocols(httpProtocol);
+});
+
+Ten model stopniowo zwiększa liczbę użytkowników od 1 do 100 w ciągu 10 minut, co pozwala obserwować, jak system reaguje na rosnące obciążenie[4][5].
+Model Skokowy (Spike Testing)
+Model skokowy symuluje nagłe, krótkotrwałe skoki w liczbie użytkowników, które mogą wystąpić np. podczas promocji lub specjalnych wydarzeń.
+Dlaczego warto stosować?
+Ten model testowy pozwala ocenić, czy system może obsłużyć niespodziewany napływ użytkowników i jak szybko wraca do normalnego funkcjonowania po takim zdarzeniu[6][7]. Jest to kluczowe dla systemów, które muszą być przygotowane na nieregularne wzrosty ruchu, np. podczas kampanii marketingowych.
+Implementacja w gatling-ts
+import { 
+  simulation, scenario, exec, constantUsersPerSec, 
+  rampUsers, nothingFor, atOnceUsers 
+} from "@gatling.io/core";
+import { http } from "@gatling.io/http";
+
+export default simulation((setUp) => {
+  const httpProtocol = http
+    .baseUrl("http://twojsystem.pl")
+    .acceptHeader("application/json");
+
+  const mojScenariusz = scenario("Scenariusz Spike").exec(/* kroki scenariusza */);
+
+  setUp(
+    mojScenariusz.injectOpen(
+      constantUsersPerSec(10).during(120),  // Bazowe obciążenie: 10 użytkowników/s przez 2 minuty
+      nothingFor(5),                        // Krótka przerwa
+      atOnceUsers(100),                     // Nagły skok: 100 użytkowników naraz
+      nothingFor(30),                       // Utrzymanie skoku przez 30 sekund
+      constantUsersPerSec(10).during(120)   // Powrót do bazowego obciążenia
+    )
+  ).protocols(httpProtocol);
+});
+
+Ten model symuluje nagły skok w liczbie użytkowników, co pozwala ocenić odporność systemu na gwałtowne zmiany obciążenia[8][9].
+Model Wytrzymałościowy (Endurance Testing)
+Model wytrzymałościowy weryfikuje, czy system może utrzymać stabilną wydajność przy oczekiwanym obciążeniu przez dłuższy czas.
+Dlaczego warto stosować?
+Ten model pozwala wykryć problemy, które pojawiają się tylko przy długotrwałym działaniu systemu, takie jak wycieki pamięci czy degradacja wydajności bazy danych w czasie[1][10]. Jest to kluczowe dla systemów, które muszą działać nieprzerwanie przez długi czas.
+Implementacja w gatling-ts
+import { simulation, scenario, exec, constantConcurrentUsers } from "@gatling.io/core";
+import { http } from "@gatling.io/http";
+
+export default simulation((setUp) => {
+  const httpProtocol = http
+    .baseUrl("http://twojsystem.pl")
+    .acceptHeader("application/json");
+
+  const mojScenariusz = scenario("Scenariusz Wytrzymałościowy").exec(/* kroki scenariusza */);
+
+  setUp(
+    // Model zamknięty - utrzymuje stałe obciążenie przez długi czas
+    mojScenariusz.injectClosed(
+      constantConcurrentUsers(20).during(3600 * 6) // 6 godzin
+    )
+  ).protocols(httpProtocol)
+   .assertions(
+     // Sprawdzamy, czy wydajność pozostaje stabilna przez cały czas trwania testu
+     global().responseTime().mean().lt(500),
+     global().successfulRequests().percent().gt(99)
+   );
+});
+
+Ten model utrzymuje stałe obciążenie przez wiele godzin, co pozwala wykryć problemy związane z długotrwałym działaniem systemu[6][1].
+Model Przeciążeniowy (Stress Testing)
+Model przeciążeniowy systematycznie zwiększa obciążenie do ekstremalnych poziomów, aby określić maksymalną pojemność systemu i jego zachowanie w warunkach przekraczających normalne użytkowanie.
+Dlaczego warto stosować?
+Testy przeciążeniowe pomagają zidentyfikować maksymalną liczbę użytkowników, jaką system może obsłużyć, zanim wydajność spadnie poniżej akceptowalnego poziomu[11][12]. Pozwalają również sprawdzić, czy system gracefully degraduje się pod obciążeniem, czy całkowicie zawodzi. Jest to kluczowe dla planowania pojemności i zapewnienia, że system ma odpowiednie mechanizmy odporności.
+Implementacja w gatling-ts
+import { simulation, scenario, exec, incrementUsersPerSec } from "@gatling.io/core";
+import { http } from "@gatling.io/http";
+
+export default simulation((setUp) => {
+  const httpProtocol = http
+    .baseUrl("http://twojsystem.pl")
+    .acceptHeader("application/json");
+
+  const mojScenariusz = scenario("Scenariusz Stress").exec(/* kroki scenariusza */);
+
+  setUp(
+    // Model otwarty - stopniowo zwiększa obciążenie do ekstremalnych poziomów
+    mojScenariusz.injectOpen(
+      incrementUsersPerSec(5)    // Zwiększa o 5 użytkowników/s w każdym kroku
+        .times(20)               // Wykonuje 20 kroków (do 100 użytkowników/s)
+        .eachLevelLasting(30)    // Każdy poziom trwa 30 sekund
+        .separatedByRampsLasting(10) // 10-sekundowe rampy między poziomami
+    )
+  ).protocols(httpProtocol)
+   .assertions(
+     // Monitorujemy czas odpowiedzi i procent błędów, aby określić punkt załamania
+     global().responseTime().percentile(95).lt(2000),
+     global().failedRequests().percent().lt(5)
+   );
+});
+
+Ten model stopniowo zwiększa obciążenie do ekstremalnych poziomów, co pozwala określić maksymalną pojemność systemu i zidentyfikować punkt załamania[13][12].
+Podsumowanie Korzyści z Zastosowania Tych Modeli
+Zastosowanie powyższych 5 modeli testów wydajnościowych zapewnia kompleksową ocenę kondycji systemu:
+1.	Model Bazowy identyfikuje problemy występujące przy normalnym obciążeniu[1][11].
+2.	Model Stopniowego Wzrostu wykrywa problemy z skalowalnością i określa punkt degradacji wydajności[4].
+3.	Model Skokowy weryfikuje odporność na nagłe wzrosty ruchu i czas powrotu do normalnego funkcjonowania[6][7].
+4.	Model Wytrzymałościowy identyfikuje problemy z długotrwałym działaniem, jak wycieki pamięci[10].
+5.	Model Przeciążeniowy określa maksymalną pojemność systemu i jego zachowanie przy ekstremalnym obciążeniu[12].
+Każdy z tych modeli pozwala wykryć inny rodzaj problemów wydajnościowych, co zapewnia kompleksową ocenę kondycji systemu i identyfikację potencjalnych wąskich gardeł na poziomie CPU, pamięci, operacji I/O, sieci, bazy danych lub warstwy aplikacji[10].
+Dzięki wykorzystaniu nowego SDK dla JavaScript i TypeScript w Gatlingu[14], możemy tworzyć zaawansowane testy wydajnościowe przy użyciu znanej składni, zachowując jednocześnie wszystkie zalety wydajnościowe Gatlinga.
+⁂
+ 
+1.	https://pl.wikipedia.org/wiki/Testy_wydajnościowe    
+2.	https://gatling.io/blog/workload-models-in-load-testing 
+3.	https://community.gatling.io/t/constant-users-per-sec/2267 
+4.	https://automationqahub.com/how-to-do-ramp-users-load-simulation-in-gatling/   
+5.	https://community.gatling.io/t/rampusers-over-time-spikes-in-the-beginning/4325 
+6.	https://www.youtube.com/watch?v=i2m1Kahu9z8   
+7.	https://qase.io/blog/performance-testing/  
+8.	https://stackoverflow.com/questions/49899419/create-a-spike-test-in-gatling 
+9.	https://community.gatling.io/t/spike-testing-in-galting/8166 
+10.	https://www.radview.com/blog/test-and-identify-bottlenecks-in-performance-testing/   
+11.	https://testowanie-oprogramowania.pl/load-testing-vs-stress-testing/  
+12.	https://www.softwaretestinghelp.com/what-is-performance-testing-load-testing-stress-testing/   
+13.	https://www.dotcom-monitor.com/wiki/knowledge-base/how-to-find-web-application-breaking-point/ 
+14.	https://community.gatling.io/t/introducing-our-new-javascript-and-typescript-sdk/9019 
