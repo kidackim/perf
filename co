@@ -1,31 +1,60 @@
-1.	Wprowadzenie do Gatlinga i Gatling-TS
-o	Czym jest Gatling i jakie są jego główne zalety?
-2.	Omówienie projektu testowego 
-o	Struktura projektu Gatling-TS
-o	Gdzie definiuje się nowe kroki scenariusza?
-o	Omówienie konfiguracji środowisk (env)
-o	Definiowanie i zarządzanie użytkownikami testowymi
-o	Przegląd helperów ułatwiających pisanie testów.
-3.	Analiza package.json
-o	Wyjaśnienie kluczowych zależności i skryptów.
-o	Szczegółowe omówienie pluginów związanych z gatling-ts
-	Generowanie tokena KC
-4.	Scenariusze testowe
-o	Czym są scenariusze (scenarios) w Gatlingu?
-o	Jak budować złożone scenariusze testowe krok po kroku.
-o	Najlepsze praktyki tworzenia czytelnych i utrzymywalnych scenariuszy.
-5.	Modele testowe 
-o	Omówienie 5 przygotowanych modeli testowych.
-o	Jak wybrać odpowiedni model w zależności od celów testowych?
-	Rodzaje modeli testowych 
-6.	Generowanie raportów 
-o	Jak generować standardowe raporty?
-o	Omówienie kluczowych metryk w raportach (np. czas odpowiedzi, przepustowość, błędy).
-7.	Analiza i interpretacja raportów
-o	Jak czytać i interpretować raporty Gatlinga.
-8.	Warsztaty praktyczne (2 godziny 30 minut)
-o	Samodzielne pisanie scenariuszy testowych na podstawie omówionych modeli.
-o	Analiza generowanych raportów i dyskusja wyników.
-9.	Podsumowanie i pytania 
-	Sesja pytań i odpowiedzi.
-	Podsumowanie kluczowych zagadnień.
+#!/bin/bash
+
+# Ścieżka do pliku package.json
+PACKAGE_JSON="/app/package.json"
+
+# Katalog docelowy dla Gatling
+GATLING_DIR="/opt/gatling"
+
+# Sprawdzenie czy package.json istnieje
+if [ ! -f "$PACKAGE_JSON" ]; then
+  echo "Błąd: Nie znaleziono pliku package.json w ścieżce $PACKAGE_JSON"
+  exit 1
+fi
+
+# Wyciągnięcie wersji Gatling z package.json
+# Zakładamy, że wersja jest zapisana w formacie "gatling": "3.10.5" lub jako zależność
+GATLING_VERSION=$(grep -o '"gatling":[[:space:]]*"[^"]*"' "$PACKAGE_JSON" | grep -o '[0-9]\+\.[0-9]\+\.[0-9]\+' || echo "")
+
+# Jeśli nie znaleziono bezpośrednio, szukaj w dependencies lub devDependencies
+if [ -z "$GATLING_VERSION" ]; then
+  GATLING_VERSION=$(grep -o '"gatling":[[:space:]]*"[^"]*"' "$PACKAGE_JSON" | grep -o '[0-9]\+\.[0-9]\+\.[0-9]\+' || echo "")
+fi
+
+# Jeśli nadal nie znaleziono, użyj domyślnej wersji
+if [ -z "$GATLING_VERSION" ]; then
+  echo "Nie znaleziono wersji Gatling w package.json, używam domyślnej wersji 3.10.5"
+  GATLING_VERSION="3.10.5"
+else
+  echo "Znaleziono wersję Gatling: $GATLING_VERSION"
+fi
+
+# Tworzenie katalogów
+mkdir -p "$GATLING_DIR"
+mkdir -p /tmp/downloads
+mkdir -p /tmp/archive
+
+# Pobieranie i rozpakowywanie Gatling
+echo "Pobieranie Gatling w wersji $GATLING_VERSION..."
+wget -q -O /tmp/downloads/gatling-$GATLING_VERSION.zip \
+  https://repo1.maven.org/maven2/io/gatling/highcharts/gatling-charts-highcharts-bundle/$GATLING_VERSION/gatling-charts-highcharts-bundle-$GATLING_VERSION-bundle.zip
+
+if [ $? -ne 0 ]; then
+  echo "Błąd: Nie udało się pobrać Gatling w wersji $GATLING_VERSION"
+  exit 1
+fi
+
+echo "Rozpakowywanie Gatling..."
+unzip -q /tmp/downloads/gatling-$GATLING_VERSION.zip -d /tmp/archive
+mv /tmp/archive/gatling-charts-highcharts-bundle-$GATLING_VERSION/* "$GATLING_DIR/"
+chmod -R 755 "$GATLING_DIR"
+
+# Czyszczenie
+rm -rf /tmp/downloads /tmp/archive
+
+# Ustawienie zmiennych środowiskowych
+echo "export GATLING_HOME=$GATLING_DIR" >> /etc/profile.d/gatling.sh
+echo "export PATH=\$PATH:$GATLING_DIR/bin" >> /etc/profile.d/gatling.sh
+chmod +x /etc/profile.d/gatling.sh
+
+echo "Gatling został pomyślnie zainstalowany w $GATLING_DIR"
