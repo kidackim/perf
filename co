@@ -1,45 +1,34 @@
-FROM node:21-alpine
+FROM node:20-alpine
 
 WORKDIR /app
 
 # Instalacja JDK 21 i niezbędnych narzędzi
-RUN apk add --no-cache openjdk21-jre bash wget unzip curl
+RUN apk add --no-cache openjdk21-jre bash curl
 
-# Utwórz katalogi dla Gatling z odpowiednimi uprawnieniami
-RUN mkdir -p /opt/gatling /app/.gatling/temp && \
-    chmod -R 777 /app/.gatling
-
-# Ustaw zmienne środowiskowe dla Gatling
-ENV GATLING_VERSION=3.10.5
-ENV GATLING_HOME=/opt/gatling
-ENV GATLING_CACHE_FOLDER=/app/.gatling
-ENV PATH=$PATH:$GATLING_HOME/bin
+# Ustawienie zmiennych środowiskowych
 ENV NODE_TLS_REJECT_UNAUTHORIZED=0
+ENV JAVA_HOME=/usr/lib/jvm/java-21-openjdk
+ENV PATH=$JAVA_HOME/bin:$PATH
 
-# Pobierz i zainstaluj Gatling ręcznie
-RUN wget --no-check-certificate -q -O /tmp/gatling.zip \
-    https://repo1.maven.org/maven2/io/gatling/highcharts/gatling-charts-highcharts-bundle/$GATLING_VERSION/gatling-charts-highcharts-bundle-$GATLING_VERSION-bundle.zip && \
-    unzip -q /tmp/gatling.zip -d /tmp && \
-    mv /tmp/gatling-charts-highcharts-bundle-$GATLING_VERSION/* /opt/gatling/ && \
-    rm -rf /tmp/gatling* && \
-    chmod -R 755 /opt/gatling/bin
-
-# Kopiuj pliki projektu
+# Kopiowanie plików package.json i package-lock.json (jeśli istnieje)
 COPY package*.json ./
 
-# Instaluj zależności
+# Instalacja zależności, w tym Gatling-JS
 RUN npm install
 
-# Kopiuj resztę plików
+# Kopiowanie reszty plików projektu
 COPY . .
 
-# Nadaj uprawnienia do wykonywania skryptów
+# Nadanie uprawnień do wykonywania skryptów
 RUN chmod -R 755 /app/node_modules/.bin && \
     chmod -R 755 /app/src
 
+# Tworzenie katalogu dla wyników testów Gatling
+RUN mkdir -p /app/results && chmod 777 /app/results
+
 # Tworzenie skryptu uruchamiającego
 RUN echo '#!/bin/sh' > /app/entrypoint.sh && \
-    echo 'npx ts-node src/helper && export $(grep -v "^#" .env | xargs) && $GATLING_HOME/bin/gatling.sh' >> /app/entrypoint.sh && \
+    echo 'npx ts-node src/helper && export $(grep -v "^#" .env | xargs) && npx gatling run' >> /app/entrypoint.sh && \
     chmod +x /app/entrypoint.sh
 
 # Ustawienie ENTRYPOINT na skrypt
