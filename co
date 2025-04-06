@@ -1,60 +1,46 @@
-#!/bin/bash
+FROM node:21-alpine
 
-# Ścieżka do pliku package.json
-PACKAGE_JSON="/app/package.json"
+WORKDIR /app
 
-# Katalog docelowy dla Gatling
-GATLING_DIR="/opt/gatling"
+# Instalacja JDK 21 i niezbędnych narzędzi
+RUN apk add --no-cache openjdk21-jre bash wget unzip curl
 
-# Sprawdzenie czy package.json istnieje
-if [ ! -f "$PACKAGE_JSON" ]; then
-  echo "Błąd: Nie znaleziono pliku package.json w ścieżce $PACKAGE_JSON"
-  exit 1
-fi
+# Utwórz katalogi dla Gatling z odpowiednimi uprawnieniami
+RUN mkdir -p /opt/gatling /app/.gatling/temp && \
+    chmod -R 777 /app/.gatling
 
-# Wyciągnięcie wersji Gatling z package.json
-# Zakładamy, że wersja jest zapisana w formacie "gatling": "3.10.5" lub jako zależność
-GATLING_VERSION=$(grep -o '"gatling":[[:space:]]*"[^"]*"' "$PACKAGE_JSON" | grep -o '[0-9]\+\.[0-9]\+\.[0-9]\+' || echo "")
+# Ustaw zmienne środowiskowe dla Gatling
+ENV GATLING_VERSION=3.10.5
+ENV GATLING_HOME=/opt/gatling
+ENV GATLING_CACHE_FOLDER=/app/.gatling
+ENV PATH=$PATH:$GATLING_HOME/bin
+ENV NODE_TLS_REJECT_UNAUTHORIZED=0
 
-# Jeśli nie znaleziono bezpośrednio, szukaj w dependencies lub devDependencies
-if [ -z "$GATLING_VERSION" ]; then
-  GATLING_VERSION=$(grep -o '"gatling":[[:space:]]*"[^"]*"' "$PACKAGE_JSON" | grep -o '[0-9]\+\.[0-9]\+\.[0-9]\+' || echo "")
-fi
+# Pobierz i zainstaluj Gatling ręcznie
+RUN wget --no-check-certificate -q -O /tmp/gatling.zip \
+    https://repo1.maven.org/maven2/io/gatling/highcharts/gatling-charts-highcharts-bundle/$GATLING_VERSION/gatling-charts-highcharts-bundle-$GATLING_VERSION-bundle.zip && \
+    unzip -q /tmp/gatling.zip -d /tmp && \
+    mv /tmp/gatling-charts-highcharts-bundle-$GATLING_VERSION/* /opt/gatling/ && \
+    rm -rf /tmp/gatling* && \
+    chmod -R 755 /opt/gatling/bin
 
-# Jeśli nadal nie znaleziono, użyj domyślnej wersji
-if [ -z "$GATLING_VERSION" ]; then
-  echo "Nie znaleziono wersji Gatling w package.json, używam domyślnej wersji 3.10.5"
-  GATLING_VERSION="3.10.5"
-else
-  echo "Znaleziono wersję Gatling: $GATLING_VERSION"
-fi
+# Kopiuj pliki projektu
+COPY package*.json ./
 
-# Tworzenie katalogów
-mkdir -p "$GATLING_DIR"
-mkdir -p /tmp/downloads
-mkdir -p /tmp/archive
+# Instaluj zależności
+RUN npm install
 
-# Pobieranie i rozpakowywanie Gatling
-echo "Pobieranie Gatling w wersji $GATLING_VERSION..."
-wget -q -O /tmp/downloads/gatling-$GATLING_VERSION.zip \
-  https://repo1.maven.org/maven2/io/gatling/highcharts/gatling-charts-highcharts-bundle/$GATLING_VERSION/gatling-charts-highcharts-bundle-$GATLING_VERSION-bundle.zip
+# Kopiuj resztę plików
+COPY . .
 
-if [ $? -ne 0 ]; then
-  echo "Błąd: Nie udało się pobrać Gatling w wersji $GATLING_VERSION"
-  exit 1
-fi
+# Nadaj uprawnienia do wykonywania skryptów
+RUN chmod -R 755 /app/node_modules/.bin && \
+    chmod -R 755 /app/src
 
-echo "Rozpakowywanie Gatling..."
-unzip -q /tmp/downloads/gatling-$GATLING_VERSION.zip -d /tmp/archive
-mv /tmp/archive/gatling-charts-highcharts-bundle-$GATLING_VERSION/* "$GATLING_DIR/"
-chmod -R 755 "$GATLING_DIR"
+# Tworzenie skryptu uruchamiającego
+RUN echo '#!/bin/sh' > /app/entrypoint.sh && \
+    echo 'npx ts-node src/helper && export $(grep -v "^#" .env | xargs) && $GATLING_HOME/bin/gatling.sh' >> /app/entrypoint.sh && \
+    chmod +x /app/entrypoint.sh
 
-# Czyszczenie
-rm -rf /tmp/downloads /tmp/archive
-
-# Ustawienie zmiennych środowiskowych
-echo "export GATLING_HOME=$GATLING_DIR" >> /etc/profile.d/gatling.sh
-echo "export PATH=\$PATH:$GATLING_DIR/bin" >> /etc/profile.d/gatling.sh
-chmod +x /etc/profile.d/gatling.sh
-
-echo "Gatling został pomyślnie zainstalowany w $GATLING_DIR"
+# Ustawienie ENTRYPOINT na skrypt
+ENTRYPOINT ["/app/entrypoint.sh"]
