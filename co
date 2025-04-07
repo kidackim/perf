@@ -1,35 +1,47 @@
-FROM node:20-alpine
+#!/bin/bash
+set -eo pipefail
 
-WORKDIR /app
+# Pobieranie wersji z package.json
+VERSION=$(jq -r '.devDependencies."@gatling.io/cli"' package.json | sed 's/.*#//')
+[ -z "$VERSION" ] && { echo "Błąd: Nieprawidłowa wersja w package.json"; exit 1; }
 
-# Instalacja JDK 21 i niezbędnych narzędzi
-RUN apk add --no-cache openjdk21-jre bash curl
+# Stałe konfiguracyjne
+REPO_URL="https://github.com/gatling/gatling-js"
+ZIP_URL="${REPO_URL}/releases/download/v${VERSION}/gatling-js-bundle-${VERSION}-Linux-x64.zip"
+CACHE_DIR="${HOME}/.cache/gatling-js"
+INSTALL_DIR="./node_modules/@gatling.io/cli"
 
-# Ustawienie zmiennych środowiskowych
-ENV NODE_TLS_REJECT_UNAUTHORIZED=0
-ENV JAVA_HOME=/usr/lib/jvm/java-21-openjdk
-ENV PATH=$JAVA_HOME/bin:$PATH
+# Tworzenie katalogów roboczych
+mkdir -p "${CACHE_DIR}" "${INSTALL_DIR}"
 
-# Kopiowanie plików package.json i package-lock.json (jeśli istnieje)
-COPY package*.json ./
+# Pobieranie i walidacja archiwum
+echo "🔄 Pobieranie Gatling JS w wersji ${VERSION}"
+wget -qc "${ZIP_URL}" -O "${CACHE_DIR}/bundle.zip" --show-progress || {
+  echo "❌ Błąd pobierania pliku!"
+  echo "Sprawdź dostępność wersji: ${ZIP_URL}"
+  exit 1
+}
 
-# Instalacja zależności, w tym Gatling-JS
-RUN npm install
+# Weryfikacja integralności pliku
+echo "🔍 Weryfikacja archiwum..."
+unzip -tq "${CACHE_DIR}/bundle.zip" || {
+  echo "❌ Uszkodzone archiwum!"
+  rm -f "${CACHE_DIR}/bundle.zip"
+  exit 1
+}
 
-# Kopiowanie reszty plików projektu
-COPY . .
+# Instalacja bezpośrednio z archiwum
+echo "🚀 Instalacja pakietu..."
+unzip -qoj "${CACHE_DIR}/bundle.zip" -d "${INSTALL_DIR}"
 
-# Nadanie uprawnień do wykonywania skryptów
-RUN chmod -R 755 /app/node_modules/.bin && \
-    chmod -R 755 /app/src
+# Inicjalizacja środowiska
+echo "⚙️ Inicjalizacja Gatling..."
+(cd "${INSTALL_DIR}" && npx gatling install --quiet)
 
-# Tworzenie katalogu dla wyników testów Gatling
-RUN mkdir -p /app/results && chmod 777 /app/results
+# Czyszczenie cache
+echo "🧹 Czyszczenie plików tymczasowych..."
+rm -f "${CACHE_DIR}/bundle.zip"
 
-# Tworzenie skryptu uruchamiającego
-RUN echo '#!/bin/sh' > /app/entrypoint.sh && \
-    echo 'npx ts-node src/helper && export $(grep -v "^#" .env | xargs) && npx gatling run' >> /app/entrypoint.sh && \
-    chmod +x /app/entrypoint.sh
-
-# Ustawienie ENTRYPOINT na skrypt
-ENTRYPOINT ["/app/entrypoint.sh"]
+echo -e "\n✅ Instalacja zakończona pomyślnie!"
+echo "   Wersja Gatling: ${VERSION}"
+echo "   Ścieżka instalacji: ${INSTALL_DIR}"
