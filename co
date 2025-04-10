@@ -1,47 +1,15 @@
-#!/bin/bash
-set -eo pipefail
+version: '3.8'
 
-# Pobieranie wersji z package.json
-VERSION=$(jq -r '.devDependencies."@gatling.io/cli"' package.json | sed 's/.*#//')
-[ -z "$VERSION" ] && { echo "Błąd: Nieprawidłowa wersja w package.json"; exit 1; }
-
-# Stałe konfiguracyjne
-REPO_URL="https://github.com/gatling/gatling-js"
-ZIP_URL="${REPO_URL}/releases/download/v${VERSION}/gatling-js-bundle-${VERSION}-Linux-x64.zip"
-CACHE_DIR="${HOME}/.cache/gatling-js"
-INSTALL_DIR="./node_modules/@gatling.io/cli"
-
-# Tworzenie katalogów roboczych
-mkdir -p "${CACHE_DIR}" "${INSTALL_DIR}"
-
-# Pobieranie i walidacja archiwum
-echo "🔄 Pobieranie Gatling JS w wersji ${VERSION}"
-wget -qc "${ZIP_URL}" -O "${CACHE_DIR}/bundle.zip" --show-progress || {
-  echo "❌ Błąd pobierania pliku!"
-  echo "Sprawdź dostępność wersji: ${ZIP_URL}"
-  exit 1
-}
-
-# Weryfikacja integralności pliku
-echo "🔍 Weryfikacja archiwum..."
-unzip -tq "${CACHE_DIR}/bundle.zip" || {
-  echo "❌ Uszkodzone archiwum!"
-  rm -f "${CACHE_DIR}/bundle.zip"
-  exit 1
-}
-
-# Instalacja bezpośrednio z archiwum
-echo "🚀 Instalacja pakietu..."
-unzip -qoj "${CACHE_DIR}/bundle.zip" -d "${INSTALL_DIR}"
-
-# Inicjalizacja środowiska
-echo "⚙️ Inicjalizacja Gatling..."
-(cd "${INSTALL_DIR}" && npx gatling install --quiet)
-
-# Czyszczenie cache
-echo "🧹 Czyszczenie plików tymczasowych..."
-rm -f "${CACHE_DIR}/bundle.zip"
-
-echo -e "\n✅ Instalacja zakończona pomyślnie!"
-echo "   Wersja Gatling: ${VERSION}"
-echo "   Ścieżka instalacji: ${INSTALL_DIR}"
+services:
+  perf:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: perf
+    volumes:
+      - ./:/app/target
+    environment:
+      - NODE_TLS_REJECT_UNAUTHORIZED=0
+    tty: true
+    stdin_open: true
+    command: npm run test
