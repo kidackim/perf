@@ -1,15 +1,43 @@
-version: '3.8'
-
-services:
-  perf:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: perf
-    volumes:
-      - ./:/app/target
-    environment:
-      - NODE_TLS_REJECT_UNAUTHORIZED=0
-    tty: true
-    stdin_open: true
-    command: npm run test
+- name: Budowanie i uruchamianie obrazu Docker za pomocą Podman
+  ansible.windows.win_powershell:
+    error_action: continue
+    script: |
+      # 1. Inicjalizacja maszyny Podman z Hyper-V (bardziej stabilne niż WSL)
+      $machineExists = podman machine list | Select-String -Pattern "podman-machine-default"
+      if (-not $machineExists) {
+        Write-Output "Inicjalizacja maszyny Podman z Hyper-V..."
+        podman machine init --cpus 2 --memory 4096 --disk-size 20 --rootful --now
+      } else {
+        # Sprawdź, czy maszyna jest uruchomiona
+        $machineRunning = podman machine list | Select-String -Pattern "Running"
+        if (-not $machineRunning) {
+          Write-Output "Uruchamianie maszyny Podman..."
+          podman machine start
+        }
+      }
+      
+      # 2. Poczekaj na pełne uruchomienie maszyny
+      Write-Output "Oczekiwanie na pełne uruchomienie maszyny Podman..."
+      Start-Sleep -Seconds 30
+      
+      # 3. Sprawdź połączenia systemowe
+      Write-Output "Sprawdzanie połączeń systemowych..."
+      podman system connection list
+      
+      # 4. Ustaw domyślne połączenie na rootful (jeśli dostępne)
+      $rootfulConn = podman system connection list | Select-String -Pattern "-root"
+      if ($rootfulConn) {
+        Write-Output "Ustawianie połączenia rootful jako domyślne..."
+        podman system connection default podman-machine-default-root
+      }
+      
+      # 5. Budowanie obrazu Docker
+      Write-Output "Budowanie obrazu Docker..."
+      podman build -t moj-obraz:latest .
+      
+      # 6. Uruchamianie obrazu
+      Write-Output "Uruchamianie obrazu Docker..."
+      podman run -d --name moj-kontener -p 8080:80 moj-obraz:latest
+      
+      # 7. Sprawdź, czy kontener działa
+      podman ps
