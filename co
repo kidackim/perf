@@ -1,43 +1,407 @@
-- name: Budowanie i uruchamianie obrazu Docker za pomocą Podman
-  ansible.windows.win_powershell:
-    error_action: continue
-    script: |
-      # 1. Inicjalizacja maszyny Podman z Hyper-V (bardziej stabilne niż WSL)
-      $machineExists = podman machine list | Select-String -Pattern "podman-machine-default"
-      if (-not $machineExists) {
-        Write-Output "Inicjalizacja maszyny Podman z Hyper-V..."
-        podman machine init --cpus 2 --memory 4096 --disk-size 20 --rootful --now
-      } else {
-        # Sprawdź, czy maszyna jest uruchomiona
-        $machineRunning = podman machine list | Select-String -Pattern "Running"
-        if (-not $machineRunning) {
-          Write-Output "Uruchamianie maszyny Podman..."
-          podman machine start
+const fs = require('fs-extra');
+const path = require('path');
+const { XMLBuilder } = require('fast-xml-parser');
+
+// Stałe definiujące typy wpisów w pliku simulation.log
+const LOG_TYPES = {
+  RUN: 'RUN',
+  REQUEST: 'REQUEST',
+  RESPONSE: 'RESPONSE',
+  GROUP: 'GROUP',
+  ERROR: 'ERROR'
+};
+
+// Funkcja parsująca plik simulation.log
+function parseGatlingSimulationLog(logFilePath) {
+  console.log(`Parsowanie pliku simulation.log: ${logFilePath}`);
+  const logContent = fs.readFileSync(logFilePath, 'utf-8');
+  const lines = logContent.split('\n').filter(line => line.trim());
+  
+  const simulationData = {
+    name: '',
+    startTime: 0,
+    endTime: 0,
+    requests: {},
+    errors: [],
+    groups: {}
+  };
+
+  lines.forEach(line => {
+    const parts = line.split('\t');
+    const type = parts[0];
+    
+    switch(type) {
+      case LOG_TYPES.RUN:
+        // Format: RUN    [scenario]   [timestamp]   [start/end]
+        simulationData.name = parts[1];
+        if (parts[3] === 'START') {
+          simulationData.startTime = parseInt(parts[2], 10);
+        } else if (parts[3] === 'END') {
+          simulationData.endTime = parseInt(parts[2], 10);
         }
+        break;
+        
+      case LOG_TYPES.REQUEST:
+        // Format: REQUEST [scenario] [userId] [groupId] [requestName] [timestamp] [start/end] [status] [errorMessage]
+        const requestId = `${parts[3]}_${parts[4]}_${parts[2]}`;
+        
+        if (!simulationData.requests[requestId]) {
+          simulationData.requests[requestId] = {
+            name: parts[4],
+            userId: parts[2],
+            groupId: parts[3],
+            startTime: 0,
+            endTime: 0,
+            status: 'OK',
+            errorMessage: '',
+            duration: 0
+          };
+        }
+        
+        if (parts[6] === 'START') {
+          simulationData.requests[requestId].startTime = parseInt(parts[5], 10);
+        } else if (parts[6] === 'END') {
+          simulationData.requests[requestId].endTime = parseInt(parts[5], 10);
+          simulationData.requests[requestId].status = parts[7] || 'OK';
+          simulationData.requests[requestId].errorMessage = parts[8] || '';
+          
+          // Obliczenie czasu trwania
+          if (simulationData.requests[requestId].startTime) {
+            simulationData.requests[requestId].duration = 
+              (simulationData.requests[requestId].endTime - simulationData.requests[requestId].startTime) / 1000;
+          }
+        }
+        break;
+        
+      case LOG_TYPES.ERROR:
+        // Format: ERROR [scenario] [userId] [timestamp] [errorMessage]
+        simulationData.errors.push({
+          userId: parts[2],
+          timestamp: parseInt(parts[3], 10),
+          message: parts[4] || ''
+        });
+        break;
+    }
+  });
+  
+  console.log(`Sparsowano ${Object.keys(simulationData.requests).length} żądań i ${simulationData.errors.length} błędów`);
+  return simulationData;
+}
+
+// Funkcja przekształcająca wyniki w format JUnit XML
+function convertToJUnitXml(simulationData, thresholds = {}) {
+  console.log(`Konwersja danych symulacji do formatu JUnit XML`);
+  
+  // Domyślne progi dla czasów odpowiedzi (w sekundach)
+  const defaultThresholds = {
+    warning: 2,    // Powyżej 2s to warning
+    error: 5       // Powyżej 5s to error
+  };
+  
+  const thresholdConfig = { ...defaultThresholds, ...thresholds };
+  
+  // Liczba testów, niepowodzeń i błędów
+  const testCount = Object.keys(simulationData.requests).length;
+  let failureCount = 0;
+  let errorCount = simulationData.errors.length;
+  
+  // Obliczenie całkowitego czasu trwania symulacji
+  const totalDuration = simulationData.endTime && simulationData.startTime 
+    ? (simulationData.endTime - simulationData.startTime) / 1000 
+    : 0;
+  
+  // Tworzenie testcase dla każdego żądania
+  const testcases = Object.values(simulationData.requests).map(request => {
+    const testcase = {
+      '@_name': request.name,
+      '@_classname': simulationData.name || 'Gatling Simulation',
+      '@_time': request.duration.toFixed(3)
+    };
+    
+    // Sprawdzenie, czy czas trwania przekracza progi
+    if (request.status !== 'OK') {
+      failureCount++;
+      testcase.failure = {
+        '@_message': request.errorMessage || 'Żądanie zakończone niepowodzeniem',
+        '@_type': 'RequestFailure',
+        '#text': `Żądanie nie powiodło się ze statusem: ${request.status}. Błąd: ${request.errorMessage}`
+      };
+    } else if (request.duration > thresholdConfig.error) {
+      errorCount++;
+      testcase.error = {
+        '@_message': `Czas odpowiedzi przekroczył próg błędu: ${request.duration.toFixed(3)}s > ${thresholdConfig.error}s`,
+        '@_type': 'ResponseTimeExceeded',
+        '#text': `Czas trwania żądania: ${request.duration.toFixed(3)}s, Próg: ${thresholdConfig.error}s`
+      };
+    } else if (request.duration > thresholdConfig.warning) {
+      failureCount++;
+      testcase.failure = {
+        '@_message': `Czas odpowiedzi przekroczył próg ostrzeżenia: ${request.duration.toFixed(3)}s > ${thresholdConfig.warning}s`,
+        '@_type': 'ResponseTimeWarning',
+        '#text': `Czas trwania żądania: ${request.duration.toFixed(3)}s, Próg: ${thresholdConfig.warning}s`
+      };
+    }
+    
+    return testcase;
+  });
+  
+  // Dodanie specjalnych testcase dla błędów niezwiązanych z żądaniami
+  simulationData.errors.forEach(error => {
+    testcases.push({
+      '@_name': 'BłądOgólny',
+      '@_classname': simulationData.name || 'Gatling Simulation',
+      '@_time': '0',
+      'error': {
+        '@_message': error.message || 'Nieznany błąd',
+        '@_type': 'SimulationError',
+        '#text': `Błąd o czasie ${new Date(error.timestamp).toISOString()}: ${error.message}`
       }
-      
-      # 2. Poczekaj na pełne uruchomienie maszyny
-      Write-Output "Oczekiwanie na pełne uruchomienie maszyny Podman..."
-      Start-Sleep -Seconds 30
-      
-      # 3. Sprawdź połączenia systemowe
-      Write-Output "Sprawdzanie połączeń systemowych..."
-      podman system connection list
-      
-      # 4. Ustaw domyślne połączenie na rootful (jeśli dostępne)
-      $rootfulConn = podman system connection list | Select-String -Pattern "-root"
-      if ($rootfulConn) {
-        Write-Output "Ustawianie połączenia rootful jako domyślne..."
-        podman system connection default podman-machine-default-root
+    });
+  });
+  
+  // Tworzenie struktury JUnit XML
+  const junitData = {
+    'testsuites': {
+      'testsuite': {
+        '@_name': simulationData.name || 'Gatling Simulation',
+        '@_tests': testCount + simulationData.errors.length,
+        '@_failures': failureCount,
+        '@_errors': errorCount,
+        '@_time': totalDuration.toFixed(3),
+        'testcase': testcases
       }
+    }
+  };
+  
+  console.log(`Utworzono JUnit XML z ${testCount + simulationData.errors.length} testami, ${failureCount} niepowodzeniami, ${errorCount} błędami`);
+  return junitData;
+}
+
+// Funkcja dodająca załączniki do raportu XML
+function addAttachmentsToJUnitXml(junitData, attachmentsDir, baseOutputDir) {
+  console.log(`Dodawanie załączników z katalogu: ${attachmentsDir}`);
+  
+  if (!fs.existsSync(attachmentsDir)) {
+    console.warn(`Katalog załączników nie znaleziony: ${attachmentsDir}`);
+    return junitData;
+  }
+
+  const attachmentFiles = fs.readdirSync(attachmentsDir)
+    .filter(file => fs.statSync(path.join(attachmentsDir, file)).isFile());
+
+  console.log(`Znaleziono ${attachmentFiles.length} plików załączników`);
+
+  // Kopia struktury dla bezpieczeństwa
+  const junitDataWithAttachments = JSON.parse(JSON.stringify(junitData));
+  const testcases = junitDataWithAttachments.testsuites.testsuite.testcase;
+
+  // Dodajemy załączniki do każdego testcase
+  if (attachmentFiles.length > 0) {
+    testcases.forEach(testcase => {
+      if (!testcase['system-out']) {
+        testcase['system-out'] = { '#text': '' };
+      }
+
+      const attachmentsText = attachmentFiles.map(file => {
+        // Kopiujemy plik załącznika do katalogu wyjściowego
+        if (baseOutputDir) {
+          const attachmentOutputDir = path.join(baseOutputDir, 'attachments');
+          if (!fs.existsSync(attachmentOutputDir)) {
+            fs.mkdirSync(attachmentOutputDir, { recursive: true });
+          }
+          fs.copyFileSync(
+            path.join(attachmentsDir, file),
+            path.join(attachmentOutputDir, file)
+          );
+        }
+
+        // Format dla Azure DevOps: [[ATTACHMENT|path/to/file.ext]]
+        return `[[ATTACHMENT|attachments/${file}]]`;
+      }).join('\n');
+
+      // Dodajemy tekst załączników
+      if (testcase['system-out']['#text']) {
+        testcase['system-out']['#text'] += '\n' + attachmentsText;
+      } else {
+        testcase['system-out']['#text'] = attachmentsText;
+      }
+    });
+  }
+
+  return junitDataWithAttachments;
+}
+
+// Główna funkcja generująca raport XML
+function createAzureDevOpsReport(options) {
+  const {
+    simulationLogPath,
+    outputXmlPath,
+    attachmentsDir,
+    htmlReportDir,
+    thresholds = {}
+  } = options;
+
+  console.log(`Tworzenie raportu Azure DevOps z opcjami:`, options);
+
+  try {
+    // Sprawdzenie, czy plik simulation.log istnieje
+    if (!fs.existsSync(simulationLogPath)) {
+      throw new Error(`Nie znaleziono pliku simulation.log: ${simulationLogPath}`);
+    }
+    
+    // Tworzenie katalogu wyjściowego, jeśli nie istnieje
+    const outputDir = path.dirname(outputXmlPath);
+    if (!fs.existsSync(outputDir)) {
+      fs.mkdirSync(outputDir, { recursive: true });
+    }
+    
+    // Parsowanie pliku simulation.log
+    const simulationData = parseGatlingSimulationLog(simulationLogPath);
+    
+    // Konwersja do JUnit XML
+    let junitData = convertToJUnitXml(simulationData, thresholds);
+    
+    // Dodanie załączników, jeśli podano katalog
+    if (attachmentsDir) {
+      junitData = addAttachmentsToJUnitXml(junitData, attachmentsDir, outputDir);
+    }
+    
+    // Dodanie raportu HTML jako załącznika, jeśli podano katalog
+    if (htmlReportDir && fs.existsSync(htmlReportDir)) {
+      const htmlFiles = fs.readdirSync(htmlReportDir)
+        .filter(file => file.endsWith('.html') && fs.statSync(path.join(htmlReportDir, file)).isFile());
       
-      # 5. Budowanie obrazu Docker
-      Write-Output "Budowanie obrazu Docker..."
-      podman build -t moj-obraz:latest .
-      
-      # 6. Uruchamianie obrazu
-      Write-Output "Uruchamianie obrazu Docker..."
-      podman run -d --name moj-kontener -p 8080:80 moj-obraz:latest
-      
-      # 7. Sprawdź, czy kontener działa
-      podman ps
+      if (htmlFiles.length > 0) {
+        console.log(`Znaleziono ${htmlFiles.length} plików raportów HTML`);
+        
+        // Utworzenie katalogu dla raportów HTML
+        const htmlOutputDir = path.join(outputDir, 'html_reports');
+        if (!fs.existsSync(htmlOutputDir)) {
+          fs.mkdirSync(htmlOutputDir, { recursive: true });
+        }
+        
+        // Kopiowanie plików HTML
+        htmlFiles.forEach(file => {
+          fs.copyFileSync(
+            path.join(htmlReportDir, file),
+            path.join(htmlOutputDir, file)
+          );
+        });
+        
+        // Dodanie odnośników do raportów HTML
+        const testcases = junitData.testsuites.testsuite.testcase;
+        testcases.forEach(testcase => {
+          if (!testcase['system-out']) {
+            testcase['system-out'] = { '#text': '' };
+          }
+          
+          const htmlReportsText = htmlFiles.map(file => 
+            `[[ATTACHMENT|html_reports/${file}]]`
+          ).join('\n');
+          
+          if (testcase['system-out']['#text']) {
+            testcase['system-out']['#text'] += '\n' + htmlReportsText;
+          } else {
+            testcase['system-out']['#text'] = htmlReportsText;
+          }
+        });
+      }
+    }
+    
+    // Zapis XML do pliku
+    const builder = new XMLBuilder({
+      format: true,
+      ignoreAttributes: false,
+      processEntities: false
+    });
+    const xmlContent = '<?xml version="1.0" encoding="UTF-8" ?>\n' + builder.build(junitData);
+    
+    fs.writeFileSync(outputXmlPath, xmlContent);
+    console.log(`Raport wygenerowany pomyślnie: ${outputXmlPath}`);
+    
+    return {
+      totalTests: junitData.testsuites.testsuite['@_tests'],
+      failures: junitData.testsuites.testsuite['@_failures'],
+      errors: junitData.testsuites.testsuite['@_errors'],
+      totalTime: junitData.testsuites.testsuite['@_time']
+    };
+    
+  } catch (error) {
+    console.error('Błąd podczas tworzenia raportu:', error);
+    throw error;
+  }
+}
+
+// Parsowanie argumentów wiersza poleceń
+function parseCommandLineArgs() {
+  const args = process.argv.slice(2);
+  const options = {
+    simulationLogPath: null,
+    outputXmlPath: null,
+    attachmentsDir: null,
+    htmlReportDir: null,
+    thresholds: {
+      warning: 2,
+      error: 5
+    }
+  };
+  
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i];
+    
+    if (arg === '--log' || arg === '-l') {
+      options.simulationLogPath = args[++i];
+    } else if (arg === '--output' || arg === '-o') {
+      options.outputXmlPath = args[++i];
+    } else if (arg === '--attachments' || arg === '-a') {
+      options.attachmentsDir = args[++i];
+    } else if (arg === '--html' || arg === '-h') {
+      options.htmlReportDir = args[++i];
+    } else if (arg === '--warning-threshold' || arg === '-w') {
+      options.thresholds.warning = parseFloat(args[++i]);
+    } else if (arg === '--error-threshold' || arg === '-e') {
+      options.thresholds.error = parseFloat(args[++i]);
+    } else if (arg === '--help') {
+      console.log(`
+Użycie: node gatling-xml-reporter.js [opcje]
+
+Opcje:
+  --log, -l <ścieżka>           Ścieżka do pliku simulation.log (wymagana)
+  --output, -o <ścieżka>        Ścieżka wyjściowa dla raportu XML (wymagana)
+  --attachments, -a <ścieżka>   Katalog z załącznikami do dołączenia
+  --html, -h <ścieżka>          Katalog z raportami HTML do dołączenia
+  --warning-threshold, -w <n>   Próg czasu odpowiedzi dla ostrzeżeń (w sekundach, domyślnie: 2)
+  --error-threshold, -e <n>     Próg czasu odpowiedzi dla błędów (w sekundach, domyślnie: 5)
+  --help                        Pokaż tę wiadomość pomocy
+      `);
+      process.exit(0);
+    }
+  }
+  
+  // Sprawdzenie wymaganych argumentów
+  if (!options.simulationLogPath) {
+    console.error('Błąd: Brak wymaganego argumentu --log');
+    process.exit(1);
+  }
+  
+  if (!options.outputXmlPath) {
+    console.error('Błąd: Brak wymaganego argumentu --output');
+    process.exit(1);
+  }
+  
+  return options;
+}
+
+// Wykonanie skryptu, jeśli uruchomiono bezpośrednio (nie jako moduł)
+if (require.main === module) {
+  const options = parseCommandLineArgs();
+  createAzureDevOpsReport(options);
+} else {
+  // Eksport funkcji, gdy użyto jako moduł
+  module.exports = {
+    createAzureDevOpsReport,
+    parseGatlingSimulationLog,
+    convertToJUnitXml,
+    addAttachmentsToJUnitXml
+  };
+}
