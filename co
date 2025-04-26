@@ -1,4 +1,4 @@
-import fs from 'fs';
+fimport fs from 'fs';
 import path from 'path';
 import vm from 'node:vm';
 
