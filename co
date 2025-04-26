@@ -1,234 +1,226 @@
-const fs = require('fs');
-const path = require('path');
-const { XMLBuilder } = require('fast-xml-parser');
+import fs from 'fs';
+import path from 'path';
+import vm from 'node:vm';
 
-const LOG_TYPES = {
-  RUN: 'RUN',
-  REQUEST: 'REQUEST',
-  ERROR: 'ERROR'
-};
-
-function parseGatlingSimulationLog(logFilePath) {
-  const logContent = fs.readFileSync(logFilePath, 'utf-8');
-  const lines = logContent.split('\n').filter(line => line.trim());
-  
-  const simulationData = {
-    name: '',
-    startTime: 0,
-    endTime: 0,
-    requests: {},
-    errors: []
-  };
-
-  lines.forEach(line => {
-    const parts = line.split('\t');
-    const type = parts[0];
+/**
+ * Konwertuje plik stats.js Gatling na format JUnit XML zgodny z Azure DevOps
+ * @param {string} statsFilePath - Ścieżka do pliku stats.js
+ * @param {string} outputXmlPath - Ścieżka do pliku wyjściowego XML
+ */
+function convertGatlingStatsToJunitXml(statsFilePath, outputXmlPath) {
+  try {
+    // Wczytaj zawartość pliku stats.js
+    let content = fs.readFileSync(statsFilePath, 'utf-8');
     
-    switch(type) {
-      case LOG_TYPES.RUN:
-        simulationData.name = parts[1];
-        if (parts[3] === 'START') {
-          simulationData.startTime = parseInt(parts[2], 10);
-        } else if (parts[3] === 'END') {
-          simulationData.endTime = parseInt(parts[2], 10);
-        }
-        break;
-        
-      case LOG_TYPES.REQUEST:
-        const requestId = `${parts[3]}_${parts[4]}_${parts[2]}`;
-        
-        if (!simulationData.requests[requestId]) {
-          simulationData.requests[requestId] = {
-            name: parts[4],
-            startTime: 0,
-            endTime: 0,
-            status: 'OK',
-            errorMessage: '',
-            duration: 0
-          };
-        }
-        
-        if (parts[6] === 'START') {
-          simulationData.requests[requestId].startTime = parseInt(parts[5], 10);
-        } else if (parts[6] === 'END') {
-          simulationData.requests[requestId].endTime = parseInt(parts[5], 10);
-          simulationData.requests[requestId].status = parts[7] || 'OK';
-          simulationData.requests[requestId].errorMessage = parts[8] || '';
-          
-          if (simulationData.requests[requestId].startTime) {
-            simulationData.requests[requestId].duration = 
-              (simulationData.requests[requestId].endTime - 
-               simulationData.requests[requestId].startTime) / 1000;
-          }
-        }
-        break;
-        
-      case LOG_TYPES.ERROR:
-        simulationData.errors.push({
-          timestamp: parseInt(parts[3], 10),
-          message: parts[4] || ''
-        });
-        break;
-    }
-  });
-  
-  return simulationData;
-}
-
-function convertToJUnitXml(simulationData, thresholds = {}) {
-  const defaultThresholds = {
-    warning: 2,
-    error: 5
-  };
-  
-  const thresholdConfig = { ...defaultThresholds, ...thresholds };
-  const testCount = Object.keys(simulationData.requests).length;
-  let failureCount = 0;
-  let errorCount = simulationData.errors.length;
-  
-  const totalDuration = simulationData.endTime && simulationData.startTime 
-    ? (simulationData.endTime - simulationData.startTime) / 1000 
-    : 0;
-  
-  const testcases = Object.values(simulationData.requests).map(request => {
-    const testcase = {
-      '@_name': request.name,
-      '@_classname': simulationData.name || 'Gatling Simulation',
-      '@_time': request.duration.toFixed(3)
-    };
+    // Stwórz kontekst dla wykonania kodu
+    const context = {};
     
-    if (request.status !== 'OK') {
-      failureCount++;
-      testcase.failure = {
-        '@_message': request.errorMessage || 'Request failed',
-        '@_type': 'RequestFailure'
-      };
-    } else if (request.duration > thresholdConfig.error) {
-      errorCount++;
-      testcase.error = {
-        '@_message': `Response time exceeded error threshold: ${request.duration.toFixed(3)}s`,
-        '@_type': 'ResponseTimeExceeded'
-      };
-    } else if (request.duration > thresholdConfig.warning) {
-      failureCount++;
-      testcase.failure = {
-        '@_message': `Response time exceeded warning threshold: ${request.duration.toFixed(3)}s`,
-        '@_type': 'ResponseTimeWarning'
-      };
-    }
+    // Wykonaj kod w bezpiecznym kontekście
+    vm.runInNewContext('var stats = ' + content.split('var stats = ')[1].split('function fillStats')[0] + '; this.stats = stats;', context);
     
-    return testcase;
-  });
-
-  simulationData.errors.forEach(error => {
-    testcases.push({
-      '@_name': 'GeneralError',
-      '@_classname': simulationData.name || 'Gatling Simulation',
-      '@_time': '0',
-      'error': {
-        '@_message': error.message || 'Unknown error',
-        '@_type': 'SimulationError'
-      }
-    });
-  });
-  
-  const junitData = {
-    'testsuites': {
-      'testsuite': {
-        '@_name': simulationData.name,
-        '@_tests': testCount + simulationData.errors.length,
-        '@_failures': failureCount,
-        '@_errors': errorCount,
-        '@_time': totalDuration.toFixed(3),
-        'testcase': testcases
+    // Teraz mamy obiekt stats w kontekście
+    const stats = context.stats;
+    
+    // Pobierz nazwę symulacji z ścieżki pliku
+    const simulationName = path.basename(path.dirname(path.dirname(statsFilePath)));
+    
+    // Generuj XML w formacie JUnit zgodnym z Azure DevOps
+    // Format pliku: TEST-*.xml jest preferowany przez Azure DevOps
+    const timestamp = new Date().toISOString().replace(/:/g, '_');
+    
+    // Początek dokumentu XML
+    let xml = '<?xml version="1.0" encoding="UTF-8"?>\n';
+    
+    // Główny element testsuites - zgodny z oczekiwaniami Azure DevOps
+    xml += `<testsuites>\n`;
+    
+    // Dodaj główną testsuite dla całej symulacji
+    xml += `  <testsuite name="${simulationName}" tests="${countTests(stats)}" failures="${countFailures(stats)}" errors="0" skipped="0" timestamp="${new Date().toISOString()}" time="${calculateTotalTime(stats)}">\n`;
+    
+    // Dodaj właściwości jako komentarz dla lepszej czytelności
+    xml += '    <!-- Właściwości testu -->\n';
+    xml += '    <properties>\n';
+    xml += `      <property name="simulation.name" value="${simulationName}" />\n`;
+    xml += `      <property name="total.requests" value="${stats.stats.numberOfRequests.total}" />\n`;
+    xml += `      <property name="successful.requests" value="${stats.stats.numberOfRequests.ok}" />\n`;
+    xml += `      <property name="failed.requests" value="${stats.stats.numberOfRequests.ko}" />\n`;
+    xml += `      <property name="mean.response.time" value="${stats.stats.meanResponseTime.total}" />\n`;
+    xml += `      <property name="mean.requests.per.second" value="${stats.stats.meanNumberOfRequestsPerSecond.total}" />\n`;
+    xml += '    </properties>\n';
+    
+    // Dodaj testcase dla globalnych statystyk
+    xml += addTestCase(stats, simulationName, "Global");
+    
+    // Dodaj testcase dla każdego żądania
+    if (stats.contents) {
+      for (const [key, request] of Object.entries(stats.contents)) {
+        xml += addTestCase(request, simulationName, "Request");
       }
     }
-  };
-  
-  return junitData;
+    
+    xml += '  </testsuite>\n';
+    xml += '</testsuites>';
+    
+    // Zapisz XML do pliku z nazwą zgodną z konwencją Azure DevOps (TEST-*.xml)
+    const outputFileName = outputXmlPath.endsWith('.xml') 
+      ? outputXmlPath.replace(/\.xml$/, `.xml`)
+      : `TEST-${simulationName}.xml`;
+    
+    fs.writeFileSync(outputFileName, xml);
+    console.log(`Raport JUnit XML został zapisany do pliku: ${outputFileName}`);
+    
+  } catch (error) {
+    console.error('Wystąpił błąd podczas konwersji:', error);
+  }
 }
 
-function generateXmlReport(options) {
-  const { simulationLogPath, outputXmlPath, thresholds = {} } = options;
-
-  if (!fs.existsSync(simulationLogPath)) {
-    throw new Error(`Simulation log not found: ${simulationLogPath}`);
+/**
+ * Liczy liczbę testów w statystykach
+ * @param {Object} stats - Obiekt ze statystykami
+ * @returns {number} - Liczba testów
+ */
+function countTests(stats) {
+  let count = 1; // Liczymy główny test
+  
+  // Dodajemy liczbę żądań
+  if (stats.contents) {
+    count += Object.keys(stats.contents).length;
   }
   
-  const outputDir = path.dirname(outputXmlPath);
-  if (!fs.existsSync(outputDir)) {
-    fs.mkdirSync(outputDir, { recursive: true });
-  }
-  
-  const simulationData = parseGatlingSimulationLog(simulationLogPath);
-  const junitData = convertToJUnitXml(simulationData, thresholds);
-  
-  const builder = new XMLBuilder({
-    format: true,
-    ignoreAttributes: false,
-    processEntities: false
-  });
-  
-  const xmlContent = '<?xml version="1.0" encoding="UTF-8" ?>\n' + builder.build(junitData);
-  fs.writeFileSync(outputXmlPath, xmlContent);
-  
-  return {
-    outputPath: outputXmlPath,
-    totalTests: junitData.testsuites.testsuite['@_tests'],
-    failures: junitData.testsuites.testsuite['@_failures'],
-    errors: junitData.testsuites.testsuite['@_errors']
-  };
+  return count;
 }
 
-function parseCliArgs() {
+/**
+ * Liczy liczbę niepowodzeń w statystykach
+ * @param {Object} stats - Obiekt ze statystykami
+ * @returns {number} - Liczba niepowodzeń
+ */
+function countFailures(stats) {
+  let failures = parseInt(stats.stats.numberOfRequests.ko) > 0 ? 1 : 0;
+  
+  // Dodajemy niepowodzenia z poszczególnych żądań
+  if (stats.contents) {
+    for (const request of Object.values(stats.contents)) {
+      if (parseInt(request.stats.numberOfRequests.ko) > 0) {
+        failures++;
+      }
+    }
+  }
+  
+  return failures;
+}
+
+/**
+ * Oblicza całkowity czas testu
+ * @param {Object} stats - Obiekt ze statystykami
+ * @returns {number} - Całkowity czas w sekundach
+ */
+function calculateTotalTime(stats) {
+  // Jako przybliżenie całkowitego czasu testu używamy średniego czasu odpowiedzi
+  // podzielonego przez 1000 (aby uzyskać sekundy)
+  return parseFloat(stats.stats.meanResponseTime.total) / 1000;
+}
+
+/**
+ * Dodaje testcase dla danego żądania
+ * @param {Object} request - Obiekt z danymi żądania
+ * @param {string} simulationName - Nazwa symulacji
+ * @param {string} type - Typ testcase (Global lub Request)
+ * @returns {string} - Fragment XML z testcase
+ */
+function addTestCase(request, simulationName, type) {
+  const requestName = request.name || 'Unknown';
+  const requestPath = request.path || '';
+  const stats = request.stats;
+  
+  // Określ, czy test zakończył się sukcesem
+  const isSuccess = parseInt(stats.numberOfRequests.ko) === 0;
+  const testTime = parseFloat(stats.meanResponseTime.total) / 1000; // Konwersja ms na sekundy
+  
+  // Tworzenie nazwy klasy zgodnej z konwencją Azure DevOps
+  const className = `${simulationName}.${type}.${requestPath}`.replace(/\s+/g, '_');
+  
+  // Tworzenie nazwy testu zgodnej z konwencją Azure DevOps
+  const testName = `${requestName}`.replace(/\s+/g, '_');
+  
+  let xml = `    <testcase classname="${className}" name="${testName}" time="${testTime}">\n`;
+  
+  // Jeśli są błędy, dodaj element failure
+  if (!isSuccess) {
+    xml += `      <failure message="Request failed: ${stats.numberOfRequests.ko} out of ${stats.numberOfRequests.total} requests failed" type="RequestFailure">\n`;
+    xml += '        <![CDATA[\n';
+    xml += `        Request: ${requestName}\n`;
+    xml += `        Path: ${requestPath}\n`;
+    xml += `        Total: ${stats.numberOfRequests.total}\n`;
+    xml += `        OK: ${stats.numberOfRequests.ok}\n`;
+    xml += `        KO: ${stats.numberOfRequests.ko}\n`;
+    xml += `        Response Time (ms):\n`;
+    xml += `          Min: ${stats.minResponseTime.total}\n`;
+    xml += `          50th percentile: ${stats.percentiles1.total}\n`;
+    xml += `          75th percentile: ${stats.percentiles2.total}\n`;
+    xml += `          95th percentile: ${stats.percentiles3.total}\n`;
+    xml += `          99th percentile: ${stats.percentiles4.total}\n`;
+    xml += `          Max: ${stats.maxResponseTime.total}\n`;
+    xml += `          Mean: ${stats.meanResponseTime.total}\n`;
+    xml += `          Std Dev: ${stats.standardDeviation.total}\n`;
+    xml += '        ]]>\n';
+    xml += '      </failure>\n';
+  }
+  
+  // Dodaj system-out z dodatkowymi informacjami
+  xml += '      <system-out>\n';
+  xml += '        <![CDATA[\n';
+  xml += `        Request: ${requestName}\n`;
+  xml += `        Path: ${requestPath}\n`;
+  xml += `        Total Requests: ${stats.numberOfRequests.total}\n`;
+  xml += `        Successful Requests: ${stats.numberOfRequests.ok}\n`;
+  xml += `        Failed Requests: ${stats.numberOfRequests.ko}\n`;
+  xml += `        Requests Per Second: ${stats.meanNumberOfRequestsPerSecond.total}\n`;
+  xml += `        Response Time Statistics (ms):\n`;
+  xml += `          Min: ${stats.minResponseTime.total}\n`;
+  xml += `          50th percentile (median): ${stats.percentiles1.total}\n`;
+  xml += `          75th percentile: ${stats.percentiles2.total}\n`;
+  xml += `          95th percentile: ${stats.percentiles3.total}\n`;
+  xml += `          99th percentile: ${stats.percentiles4.total}\n`;
+  xml += `          Max: ${stats.maxResponseTime.total}\n`;
+  xml += `          Mean (average): ${stats.meanResponseTime.total}\n`;
+  xml += `          Standard Deviation: ${stats.standardDeviation.total}\n`;
+  
+  // Dodaj informacje o grupach czasowych
+  xml += `        Response Time Groups:\n`;
+  xml += `          t < 800 ms: ${stats.group1.count} (${stats.group1.percentage}%)\n`;
+  xml += `          800 ms <= t < 1200 ms: ${stats.group2.count} (${stats.group2.percentage}%)\n`;
+  xml += `          t >= 1200 ms: ${stats.group3.count} (${stats.group3.percentage}%)\n`;
+  xml += `          failed: ${stats.group4.count} (${stats.group4.percentage}%)\n`;
+  xml += '        ]]>\n';
+  xml += '      </system-out>\n';
+  
+  xml += '    </testcase>\n';
+  
+  return xml;
+}
+
+/**
+ * Główna funkcja programu
+ */
+function main() {
   const args = process.argv.slice(2);
-  const options = {
-    simulationLogPath: null,
-    outputXmlPath: null,
-    thresholds: {
-      warning: 2,
-      error: 5
-    }
-  };
   
-  for (let i = 0; i < args.length; i++) {
-    const arg = args[i];
-    
-    if (arg === '--log' || arg === '-l') {
-      options.simulationLogPath = args[++i];
-    } else if (arg === '--output' || arg === '-o') {
-      options.outputXmlPath = args[++i];
-    } else if (arg === '--warning-threshold' || arg === '-w') {
-      options.thresholds.warning = parseFloat(args[++i]);
-    } else if (arg === '--error-threshold' || arg === '-e') {
-      options.thresholds.error = parseFloat(args[++i]);
-    } else if (arg === '--help') {
-      console.log(`
-Usage: node script.js [options]
-
-Options:
-  --log, -l <path>          Path to simulation.log (required)
-  --output, -o <path>       Output XML file path (required)
-  --warning-threshold, -w   Warning threshold in seconds (default: 2)
-  --error-threshold, -e     Error threshold in seconds (default: 5)
-  --help                    Show help
-      `);
-      process.exit(0);
-    }
-  }
-  
-  if (!options.simulationLogPath || !options.outputXmlPath) {
-    console.error('Missing required arguments');
+  if (args.length < 1) {
+    console.log("Użycie: node gatling_stats_to_junit.mjs <plik_stats.js> [plik_wyjściowy.xml]");
     process.exit(1);
   }
   
-  return options;
+  const statsFilePath = args[0];
+  const outputXmlPath = args.length > 1 ? args[1] : `TEST-gatling-results.xml`;
+  
+  if (!fs.existsSync(statsFilePath)) {
+    console.error(`Błąd: Plik ${statsFilePath} nie istnieje.`);
+    process.exit(1);
+  }
+  
+  convertGatlingStatsToJunitXml(statsFilePath, outputXmlPath);
 }
 
-if (require.main === module) {
-  const options = parseCliArgs();
-  generateXmlReport(options);
-  console.log(`XML report generated successfully: ${options.outputXmlPath}`);
-} else {
-  module.exports = { generateXmlReport };
-}
+// Uruchomienie programu
+main();
