@@ -1,70 +1,88 @@
-#!/bin/bash
+import { execSync } from 'child_process';
+import { existsSync, readdirSync, statSync } from 'fs';
+import { join } from 'path';
 
-# Ścieżka do katalogu z wynikami Gatling
-GATLING_DIR="target/gatling"
+async function main() {
+  // Ścieżka do katalogu z wynikami Gatling
+  const GATLING_DIR = 'target/gatling';
 
-# Sprawdź czy katalog istnieje
-if [ ! -d "$GATLING_DIR" ]; then
-    echo "Błąd: Katalog $GATLING_DIR nie istnieje."
-    exit 1
-fi
+  // Sprawdź czy katalog istnieje
+  if (!existsSync(GATLING_DIR)) {
+    console.error(`Błąd: Katalog ${GATLING_DIR} nie istnieje.`);
+    process.exit(1);
+  }
 
-# Wykryj system operacyjny
-OS_TYPE=$(uname)
+  // Wykryj system operacyjny
+  const OS_TYPE = process.platform; // 'darwin' dla macOS, 'linux' dla Linux, 'win32' dla Windows
 
-# Znajdź najnowszy katalog jssimulation-* w zależności od systemu
-if [ "$OS_TYPE" = "Darwin" ]; then
-    # macOS (Darwin) - używa BSD find
-    LATEST_DIR=$(find "$GATLING_DIR" -maxdepth 1 -type d -name "jssimulation-*" -exec stat -f "%m %N" {} \; | sort -nr | head -1 | cut -d' ' -f2-)
-else
-    # Linux - używa GNU find
-    LATEST_DIR=$(find "$GATLING_DIR" -maxdepth 1 -type d -name "jssimulation-*" -printf "%T@ %p\n" | sort -nr | head -1 | cut -d' ' -f2-)
-fi
+  // Funkcja do znalezienia najnowszego katalogu jssimulation-*
+  function findLatestDir(baseDir: string): string | null {
+    const dirs = readdirSync(baseDir, { withFileTypes: true })
+      .filter(dirent => dirent.isDirectory() && dirent.name.startsWith('jssimulation-'))
+      .map(dirent => ({
+        name: dirent.name,
+        path: join(baseDir, dirent.name),
+        time: statSync(join(baseDir, dirent.name)).mtime.getTime(),
+      }))
+      .sort((a, b) => b.time - a.time);
 
-if [ -z "$LATEST_DIR" ]; then
-    echo "Błąd: Nie znaleziono katalogów jssimulation-* w $GATLING_DIR."
-    exit 1
-fi
+    return dirs.length > 0 ? dirs[0].path : null;
+  }
 
-echo "Znaleziono najnowszy katalog: $LATEST_DIR"
+  const LATEST_DIR = findLatestDir(GATLING_DIR);
 
-# Sprawdź czy istnieje plik stats.js w podkatalogu js
-STATS_FILE="$LATEST_DIR/js/stats.js"
+  if (!LATEST_DIR) {
+    console.error(`Błąd: Nie znaleziono katalogów jssimulation-* w ${GATLING_DIR}.`);
+    process.exit(1);
+  }
 
-if [ ! -f "$STATS_FILE" ]; then
-    echo "Błąd: Nie znaleziono pliku $STATS_FILE."
-    exit 1
-fi
+  console.log(`Znaleziono najnowszy katalog: ${LATEST_DIR}`);
 
-echo "Znaleziono plik stats.js: $STATS_FILE"
+  // Sprawdź czy istnieje plik stats.js w podkatalogu js
+  const STATS_FILE = join(LATEST_DIR, 'js', 'stats.js');
 
-# Nazwa pliku XML (w bieżącym katalogu)
-XML_FILE="TEST-gatling-results.xml"
+  if (!existsSync(STATS_FILE)) {
+    console.error(`Błąd: Nie znaleziono pliku ${STATS_FILE}.`);
+    process.exit(1);
+  }
 
-# Uruchom skrypt raport.mjs, aby wygenerować raport XML
-echo "Generowanie raportu XML..."
-node raport.mjs "$STATS_FILE" "$XML_FILE"
+  console.log(`Znaleziono plik stats.js: ${STATS_FILE}`);
 
-# Sprawdź czy plik XML został wygenerowany
-if [ ! -f "$XML_FILE" ]; then
-    echo "Błąd: Nie udało się wygenerować pliku $XML_FILE."
-    exit 1
-fi
+  // Nazwa pliku XML (w bieżącym katalogu)
+  const XML_FILE = 'TEST-gatling-results.xml';
 
-echo "Raport XML został wygenerowany: $XML_FILE"
+  try {
+    // Uruchom skrypt raport.mjs, aby wygenerować raport XML
+    console.log('Generowanie raportu XML...');
+    execSync(`node raport.mjs "${STATS_FILE}" "${XML_FILE}"`, { stdio: 'inherit' });
 
-# Nazwa pliku HTML (w bieżącym katalogu)
-HTML_FILE="gatling-report.html"
+    // Sprawdź czy plik XML został wygenerowany
+    if (!existsSync(XML_FILE)) {
+      console.error(`Błąd: Nie udało się wygenerować pliku ${XML_FILE}.`);
+      process.exit(1);
+    }
 
-# Uruchom skrypt tohtml.mjs, aby wygenerować raport HTML
-echo "Generowanie raportu HTML..."
-node tohtml.mjs "$XML_FILE" "$HTML_FILE"
+    console.log(`Raport XML został wygenerowany: ${XML_FILE}`);
 
-# Sprawdź czy plik HTML został wygenerowany
-if [ ! -f "$HTML_FILE" ]; then
-    echo "Błąd: Nie udało się wygenerować pliku $HTML_FILE."
-    exit 1
-fi
+    // Nazwa pliku HTML (w bieżącym katalogu)
+    const HTML_FILE = 'gatling-report.html';
 
-echo "Raport HTML został wygenerowany: $HTML_FILE"
-echo "Proces zakończony pomyślnie."
+    // Uruchom skrypt tohtml.mjs, aby wygenerować raport HTML
+    console.log('Generowanie raportu HTML...');
+    execSync(`node tohtml.mjs "${XML_FILE}" "${HTML_FILE}"`, { stdio: 'inherit' });
+
+    // Sprawdź czy plik HTML został wygenerowany
+    if (!existsSync(HTML_FILE)) {
+      console.error(`Błąd: Nie udało się wygenerować pliku ${HTML_FILE}.`);
+      process.exit(1);
+    }
+
+    console.log(`Raport HTML został wygenerowany: ${HTML_FILE}`);
+    console.log('Proces zakończony pomyślnie.');
+  } catch (error) {
+    console.error('Błąd podczas generowania raportów:', error);
+    process.exit(1);
+  }
+}
+
+main();
