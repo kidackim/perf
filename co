@@ -2,31 +2,25 @@ import { execSync } from 'child_process';
 import { existsSync, readdirSync, statSync } from 'fs';
 import { join } from 'path';
 
+function findLatestDir(baseDir) {
+  const dirs = readdirSync(baseDir, { withFileTypes: true })
+    .filter(dirent => dirent.isDirectory() && dirent.name.startsWith('jssimulation-'))
+    .map(dirent => ({
+      name: dirent.name,
+      path: join(baseDir, dirent.name),
+      time: statSync(join(baseDir, dirent.name)).mtime.getTime(),
+    }))
+    .sort((a, b) => b.time - a.time);
+
+  return dirs.length > 0 ? dirs[0].path : null;
+}
+
 async function main() {
-  // Ścieżka do katalogu z wynikami Gatling
   const GATLING_DIR = 'target/gatling';
 
-  // Sprawdź czy katalog istnieje
   if (!existsSync(GATLING_DIR)) {
     console.error(`Błąd: Katalog ${GATLING_DIR} nie istnieje.`);
     process.exit(1);
-  }
-
-  // Wykryj system operacyjny
-  const OS_TYPE = process.platform; // 'darwin' dla macOS, 'linux' dla Linux, 'win32' dla Windows
-
-  // Funkcja do znalezienia najnowszego katalogu jssimulation-*
-  function findLatestDir(baseDir: string): string | null {
-    const dirs = readdirSync(baseDir, { withFileTypes: true })
-      .filter(dirent => dirent.isDirectory() && dirent.name.startsWith('jssimulation-'))
-      .map(dirent => ({
-        name: dirent.name,
-        path: join(baseDir, dirent.name),
-        time: statSync(join(baseDir, dirent.name)).mtime.getTime(),
-      }))
-      .sort((a, b) => b.time - a.time);
-
-    return dirs.length > 0 ? dirs[0].path : null;
   }
 
   const LATEST_DIR = findLatestDir(GATLING_DIR);
@@ -38,7 +32,6 @@ async function main() {
 
   console.log(`Znaleziono najnowszy katalog: ${LATEST_DIR}`);
 
-  // Sprawdź czy istnieje plik stats.js w podkatalogu js
   const STATS_FILE = join(LATEST_DIR, 'js', 'stats.js');
 
   if (!existsSync(STATS_FILE)) {
@@ -48,15 +41,12 @@ async function main() {
 
   console.log(`Znaleziono plik stats.js: ${STATS_FILE}`);
 
-  // Nazwa pliku XML (w bieżącym katalogu)
   const XML_FILE = 'TEST-gatling-results.xml';
 
   try {
-    // Uruchom skrypt raport.mjs, aby wygenerować raport XML
     console.log('Generowanie raportu XML...');
-    execSync(`node raport.mjs "${STATS_FILE}" "${XML_FILE}"`, { stdio: 'inherit' });
+    execSync(`node toXML.mjs "${STATS_FILE}" "${XML_FILE}"`, { stdio: 'inherit' });
 
-    // Sprawdź czy plik XML został wygenerowany
     if (!existsSync(XML_FILE)) {
       console.error(`Błąd: Nie udało się wygenerować pliku ${XML_FILE}.`);
       process.exit(1);
@@ -64,14 +54,11 @@ async function main() {
 
     console.log(`Raport XML został wygenerowany: ${XML_FILE}`);
 
-    // Nazwa pliku HTML (w bieżącym katalogu)
     const HTML_FILE = 'gatling-report.html';
 
-    // Uruchom skrypt tohtml.mjs, aby wygenerować raport HTML
     console.log('Generowanie raportu HTML...');
-    execSync(`node tohtml.mjs "${XML_FILE}" "${HTML_FILE}"`, { stdio: 'inherit' });
+    execSync(`node toHTML.mjs "${XML_FILE}" "${HTML_FILE}"`, { stdio: 'inherit' });
 
-    // Sprawdź czy plik HTML został wygenerowany
     if (!existsSync(HTML_FILE)) {
       console.error(`Błąd: Nie udało się wygenerować pliku ${HTML_FILE}.`);
       process.exit(1);
