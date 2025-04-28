@@ -1,5 +1,5 @@
 import { execSync } from 'child_process';
-import { existsSync, readdirSync, statSync } from 'fs';
+import { existsSync, readdirSync, statSync, mkdirSync } from 'fs';
 import { join } from 'path';
 
 function findLatestDir(baseDir) {
@@ -41,7 +41,9 @@ async function main() {
 
   console.log(`Znaleziono plik stats.js: ${STATS_FILE}`);
 
-  const XML_FILE = 'TEST-gatling-results.xml';
+  // Ścieżki do plików wynikowych w folderze target/gatling
+  const XML_FILE = join(GATLING_DIR, 'TEST-gatling-results.xml');
+  const HTML_FILE = join(GATLING_DIR, 'gatling-report.html');
 
   try {
     console.log('Generowanie raportu XML...');
@@ -53,8 +55,6 @@ async function main() {
     }
 
     console.log(`Raport XML został wygenerowany: ${XML_FILE}`);
-
-    const HTML_FILE = 'gatling-report.html';
 
     console.log('Generowanie raportu HTML...');
     execSync(`node toHTML.mjs "${XML_FILE}" "${HTML_FILE}"`, { stdio: 'inherit' });
