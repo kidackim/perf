@@ -1,151 +1,143 @@
-<style>
-    /* === POCZĄTEK NOWYCH STYLÓW CSS (inspirowane ING) === */
-    :root {
-      /* Definicje kolorów inspirowane ING */
-      --primary-color: #FF6600; /* Główny pomarańcz ING */
-      --success-color: #4CAF50; /* Zielony dla sukcesu (pozostawiony dla czytelności) */
-      --warning-color: #FF9800; /* Pomarańczowy/Żółty dla ostrzeżeń/Success Rate */
-      --error-color: #F44336; /* Czerwony dla błędów (pozostawiony dla czytelności) */
-      --info-color: #0076A8; /* Można użyć drugiego odcienia niebieskiego ING lub szarego */
-      --skipped-color: #9E9E9E; /* Szary dla pominiętych */
+import { execSync } from 'child_process';
+// Dodajemy potrzebne funkcje z 'fs' i 'path' oraz 'url'
+import { existsSync, readdirSync, statSync, copyFileSync, mkdirSync } from 'fs';
+import path, { join, dirname, resolve as pathResolve } from 'path'; // Używamy aliasu dla resolve
+import { fileURLToPath } from 'url';
 
-      /* Kolory tekstu i tła */
-      --text-color: #4A4A4A; /* Ciemnoszary (zamiast czarnego #333) */
-      --text-color-on-dark: #FFFFFF; /* Biały tekst na ciemnych/kolorowych tłach */
-      --background-color: #f5f5f5; /* Jasnoszare tło strony */
-      --card-background: #fff; /* Białe tło kart */
-      --border-color: #ddd; /* Kolor ramek */
-      --header-background: #f8f9fa; /* Jaśniejsze tło nagłówków tabel/testcase */
-      --table-header-text: #333;
+async function main() {
+  // Ścieżka do katalogu z wynikami Gatling
+  const GATLING_DIR = 'target/gatling';
+
+  // Ustalenie ścieżki do bieżącego katalogu skryptu (działa w ES Modules)
+  const __filename = fileURLToPath(import.meta.url);
+  const __dirname = dirname(__filename);
+
+  console.log(`Katalog roboczy skryptu: ${process.cwd()}`);
+  console.log(`Katalog skryptu: ${__dirname}`);
+
+  try { // Przenosimy główny blok try wyżej, aby objął też kopiowanie
+
+    // --- POCZĄTEK: Logika kopiowania plików JS ---
+
+    console.log(`\nSprawdzanie i kopiowanie zasobów JS do: ${GATLING_DIR}`);
+
+    // Definicja ścieżek źródłowych
+    const reportJsSourcePath = path.join(__dirname, 'report.js'); // Zakładamy, że report.js jest obok tego skryptu
+    const chartJsSourcePath = pathResolve('node_modules/chart.js/dist/chart.umd.js'); // Względem katalogu projektu
+
+    // Definicja ścieżek docelowych
+    const resolvedTargetDirectory = pathResolve(GATLING_DIR); // Upewnij się, że ścieżka jest absolutna
+    const reportJsDestPath = path.join(resolvedTargetDirectory, 'report.js');
+    const chartJsDestPath = path.join(resolvedTargetDirectory, 'chart.umd.js');
+
+    // Sprawdzenie istnienia plików źródłowych
+    if (!existsSync(reportJsSourcePath)) {
+      throw new Error(`Błąd krytyczny: Plik źródłowy report.js nie istnieje w: ${reportJsSourcePath}`);
+    }
+    if (!existsSync(chartJsSourcePath)) {
+      throw new Error(`Błąd krytyczny: Plik źródłowy chart.umd.js nie istnieje w: ${chartJsSourcePath}. Uruchom 'npm install'.`);
     }
 
-    body {
-      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; /* Można zmienić na font ING, jeśli znany */
-      line-height: 1.6;
-      color: var(--text-color);
-      background-color: var(--background-color);
-      margin: 0;
-      padding: 20px;
+    // Sprawdzenie i utworzenie katalogu docelowego (jeśli nie istnieje)
+    if (!existsSync(resolvedTargetDirectory)) {
+      console.log(`Tworzenie katalogu docelowego: ${resolvedTargetDirectory}`);
+      mkdirSync(resolvedTargetDirectory, { recursive: true });
+    } else {
+      console.log(`Katalog docelowy ${resolvedTargetDirectory} już istnieje.`);
     }
 
-    .container { max-width: 1200px; margin: 0 auto; }
-    header { text-align: center; margin-bottom: 30px; }
+    // Kopiowanie plików
+    console.log(`Kopiowanie ${reportJsSourcePath} -> ${reportJsDestPath}`);
+    copyFileSync(reportJsSourcePath, reportJsDestPath);
+    console.log(`Kopiowanie ${chartJsSourcePath} -> ${chartJsDestPath}`);
+    copyFileSync(chartJsSourcePath, chartJsDestPath);
+    console.log('Pomyślnie skopiowano zasoby JS.');
 
-    /* Używamy koloru podstawowego (pomarańcz) dla głównych nagłówków */
-    h1, h2 { color: var(--primary-color); }
-    /* Nagłówki H3 w kartach mogą mieć standardowy ciemny kolor */
-    .card h3 { color: var(--text-color); margin-bottom: 15px; margin-top: 0; }
+    // --- KONIEC: Logika kopiowania plików JS ---
 
-    .card { background-color: var(--card-background); border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); margin-bottom: 20px; padding: 20px; overflow: hidden; }
 
-    /* --- Stylizacja Pól Podsumowania --- */
-    .summary { display: flex; flex-wrap: wrap; gap: 15px; margin-bottom: 20px; } /* Mniejszy gap i margines */
-    .summary-item {
-      flex: 1;
-      min-width: 160px; /* Nieco mniejsze */
-      padding: 15px;
-      border-radius: 6px; /* Mniejsze zaokrąglenie */
-      text-align: center;
-      box-shadow: none; /* Usunięcie cienia dla czystszego wyglądu */
-      border: 1px solid var(--border-color); /* Subtelna ramka */
-    }
-    .summary-item h3 {
-      margin-top: 0;
-      margin-bottom: 8px;
-      font-size: 0.9em; /* Mniejszy tytuł */
-      font-weight: 600;
-    }
-    .summary-item p {
-      margin-bottom: 0;
-      font-size: 1.6em; /* Większa liczba */
-      font-weight: 700;
+    // Reszta Twojego oryginalnego skryptu:
+
+    // Sprawdź czy katalog Gatling istnieje (ponownie, dla pewności, chociaz mkdirSync go stworzy)
+    if (!existsSync(GATLING_DIR)) {
+      console.error(`Błąd: Katalog ${GATLING_DIR} nie istnieje (mimo próby utworzenia?).`);
+      process.exit(1);
     }
 
-    /* Definicje kolorów TŁA i TEKSTU dla każdego typu pola podsumowania */
-    .summary-item.info { /* "Wszystkie" i "Czas (s)" */
-       background-color: var(--primary-color); /* Tło pomarańczowe */
-       color: var(--text-color-on-dark); /* Tekst biały */
-       border-color: var(--primary-color);
+    // Wykryj system operacyjny (nieużywane)
+    // const OS_TYPE = process.platform;
+
+    // Funkcja do znalezienia najnowszego katalogu jssimulation-*
+    // Usunięto adnotację typu TypeScript ": string"
+    function findLatestDir(baseDir) {
+      const dirs = readdirSync(baseDir, { withFileTypes: true })
+        .filter(dirent => dirent.isDirectory() && dirent.name.startsWith('jssimulation-'))
+        .map(dirent => ({
+          name: dirent.name,
+          path: join(baseDir, dirent.name),
+          time: statSync(join(baseDir, dirent.name)).mtime.getTime(),
+        }))
+        .sort((a, b) => b.time - a.time);
+      return dirs.length > 0 ? dirs[0].path : null;
     }
-     .summary-item.success {
-       background-color: var(--success-color);
-       color: var(--text-color-on-dark);
-       border-color: var(--success-color);
+
+    const LATEST_DIR = findLatestDir(GATLING_DIR);
+
+    if (!LATEST_DIR) {
+      console.error(`Błąd: Nie znaleziono katalogów jssimulation-* w ${GATLING_DIR}.`);
+      process.exit(1);
     }
-     .summary-item.error {
-       background-color: var(--error-color);
-       color: var(--text-color-on-dark);
-       border-color: var(--error-color);
+    console.log(`\nZnaleziono najnowszy katalog symulacji: ${LATEST_DIR}`);
+
+    // Sprawdź czy istnieje plik stats.js w podkatalogu js
+    const STATS_FILE = join(LATEST_DIR, 'js', 'stats.js');
+    if (!existsSync(STATS_FILE)) {
+      console.error(`Błąd: Nie znaleziono pliku ${STATS_FILE}.`);
+      process.exit(1);
     }
-     .summary-item.warning { /* Success Rate i Błędy */
-       background-color: var(--warning-color);
-       color: var(--text-color-on-dark); /* Sprawdź kontrast - może być potrzebny ciemny? */
-       /* Jeśli kontrast słaby, użyj ciemnego tekstu: color: var(--text-color); */
-       border-color: var(--warning-color);
+    console.log(`Znaleziono plik stats.js: ${STATS_FILE}`);
+
+    // Nazwa pliku XML (w bieżącym katalogu skryptu)
+    const XML_FILE = 'TEST-gatling-results.xml';
+    const resolvedXmlFile = pathResolve(XML_FILE); // Używamy pełnej ścieżki
+
+    // Uruchom skrypt raport.mjs, aby wygenerować raport XML
+    console.log('\nGenerowanie raportu XML...');
+    execSync(`node raport.mjs "${pathResolve(STATS_FILE)}" "${resolvedXmlFile}"`, { stdio: 'inherit' });
+
+    if (!existsSync(resolvedXmlFile)) {
+      throw new Error(`Błąd krytyczny: Nie udało się wygenerować pliku ${resolvedXmlFile}.`);
     }
-    .summary-item.skipped {
-       background-color: var(--skipped-color);
-       color: var(--text-color-on-dark);
-       border-color: var(--skipped-color);
+    console.log(`Raport XML został wygenerowany: ${resolvedXmlFile}`);
+
+    // Nazwa pliku HTML (w bieżącym katalogu skryptu)
+    const HTML_FILE = 'gatling-report.html';
+    const resolvedHtmlFile = pathResolve(HTML_FILE); // Używamy pełnej ścieżki
+
+    // Ścieżki względne do JS, które zostaną użyte wewnątrz HTML
+    // Ponieważ HTML jest w katalogu bieżącym, a JS w target/gatling, ścieżki muszą to odzwierciedlać
+    const chartJsHtmlPath = path.join(GATLING_DIR, 'chart.umd.js').replace(/\\/g, '/'); // Użyj GATLING_DIR i normalizuj ścieżkę
+    const reportJsHtmlPath = path.join(GATLING_DIR, 'report.js').replace(/\\/g, '/');   // Użyj GATLING_DIR i normalizuj ścieżkę
+
+    // Uruchom skrypt tohtml.mjs, aby wygenerować raport HTML
+    // Przekazujemy poprawne ścieżki względne do JS jako argumenty 3 i 4
+    console.log('\nGenerowanie raportu HTML...');
+    execSync(`node tohtml.mjs "${resolvedXmlFile}" "${resolvedHtmlFile}" "${chartJsHtmlPath}" "${reportJsHtmlPath}"`, { stdio: 'inherit' });
+
+    if (!existsSync(resolvedHtmlFile)) {
+      throw new Error(`Błąd krytyczny: Nie udało się wygenerować pliku ${resolvedHtmlFile}.`);
     }
-    /* --- Koniec Stylizacji Pól Podsumowania --- */
+    console.log(`Raport HTML został wygenerowany: ${resolvedHtmlFile}`);
+    console.log('\nProces zakończony pomyślnie.');
 
-
-    .properties-table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
-    .properties-table th, .properties-table td { padding: 10px 12px; border: 1px solid var(--border-color); text-align: left; word-break: break-word; }
-    .properties-table th { background-color: var(--header-background); color: var(--table-header-text); font-weight: 600; } /* Jasnoszary nagłówek tabeli */
-    .properties-table tr:nth-child(even) { background-color: rgba(0,0,0,0.015); } /* Subtelniejsze tło */
-    .properties-table td:first-child { font-weight: 500; width: 30%; }
-
-
-    .chart-container { display: flex; flex-wrap: wrap; gap: 20px; margin-bottom: 30px; }
-    .chart { flex: 1 1 400px; min-width: 300px; height: 350px; background-color: var(--card-background); border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); padding: 20px; position: relative; }
-    .chart h3 { text-align: center; margin-top: 0; margin-bottom: 20px; color: var(--text-color); } /* Tytuł wykresu ciemny */
-
-
-    .testcase { margin-bottom: 10px; padding: 0; border-radius: 8px; background-color: var(--card-background); box-shadow: 0 1px 3px rgba(0,0,0,0.08); overflow: hidden; }
-    .testcase-header { display: flex; justify-content: space-between; align-items: center; cursor: pointer; padding: 12px 15px; background-color: var(--header-background); border-bottom: 1px solid var(--border-color); }
-    .testcase.expanded .testcase-header { border-bottom-color: transparent; }
-    .testcase-name { font-weight: bold; flex-grow: 1; margin-right: 10px; word-break: break-all; color: var(--text-color); }
-    .testcase-time { margin-left: 10px; font-size: 0.9em; color: #6c757d; white-space: nowrap; }
-    .testcase-status { padding: 4px 8px; border-radius: 4px; margin-left: 10px; font-size: 0.85em; white-space: nowrap; color: var(--text-color-on-dark); } /* Tekst statusu biały */
-    .testcase-status.success { background-color: var(--success-color); }
-    .testcase-status.failure { background-color: var(--error-color); }
-    .testcase-details { margin-top: 0; padding: 15px; background-color: #fff; border-top: 1px solid var(--border-color); display: none; }
-    .testcase-details pre { background-color: #f0f0f0; /* Jaśniejsze tło pre */ padding: 10px; border-radius: 4px; white-space: pre-wrap; word-wrap: break-word; font-family: Consolas, Monaco, 'Andale Mono', 'Ubuntu Mono', monospace; font-size: 0.9em; max-height: 300px; overflow-y: auto; margin-top: 5px; margin-bottom: 10px; color: #333; border: 1px solid #eee; }
-    .testcase-details p { margin-top: 5px; margin-bottom: 5px; }
-    .testcase-details strong { color: var(--primary-color); } /* Strong pomarańczowy */
-    .testcase.expanded .testcase-details { display: block; }
-    .toggle-button { background: none; border: 1px solid var(--border-color); border-radius: 50%; cursor: pointer; font-size: 1em; color: var(--primary-color); width: 24px; height: 24px; line-height: 20px; text-align: center; padding: 0; margin-left: 10px; transition: transform 0.2s ease-in-out; }
-    .testcase.expanded .toggle-button { transform: rotate(45deg); }
-
-
-    .search-container { margin-bottom: 20px; }
-    #searchInput { width: 100%; padding: 10px 15px; border: 1px solid var(--border-color); border-radius: 4px; font-size: 16px; box-sizing: border-box; }
-    #searchInput:focus { border-color: var(--primary-color); outline: none; box-shadow: 0 0 0 2px rgba(255, 102, 0, 0.2); } /* Podświetlenie focusa pomarańczowe */
-
-
-    .tabs { display: flex; margin-bottom: 0; border-bottom: 1px solid var(--border-color); background-color: transparent; /* Usunięto tło zakładek */ border-radius: 0; padding-left: 0; }
-    .tab { padding: 12px 20px; cursor: pointer; border: none; border-bottom: 3px solid transparent; margin-right: 5px; color: #6c757d; /* Ciemniejszy szary dla nieaktywnych */ font-weight: 600; transition: all 0.2s ease; position: relative; top: 1px; /* Lekkie przesunięcie dla efektu */ }
-    .tab:hover { color: var(--primary-color); border-bottom-color: rgba(255, 102, 0, 0.5); }
-    .tab.active { color: var(--primary-color); border-bottom-color: var(--primary-color); background-color: var(--card-background); /* Tło aktywnej zakładki białe */ border-top: 1px solid var(--border-color); border-left: 1px solid var(--border-color); border-right: 1px solid var(--border-color); border-radius: 4px 4px 0 0; }
-
-
-    .tab-content { display: none; padding-top: 20px; border-top: 1px solid var(--border-color); margin-top: -1px; /* Nachodzi na dolną krawędź zakładek */ }
-    .tab-content.active { display: block; }
-
-
-    pre[id="raw-xml-pre"] { max-height: 500px; background-color: #282c34; color: #abb2bf; padding: 15px; border-radius: 4px; border: 1px solid var(--border-color); overflow-x: auto; white-space: pre; }
-
-
-    @media (max-width: 768px) {
-      .chart-container { flex-direction: column; }
-      .chart { flex-basis: auto; height: 300px; }
-      .testcase-header { flex-wrap: wrap; }
-      .testcase-name { flex-basis: 100%; margin-bottom: 5px; }
-      .testcase-time, .testcase-status, .toggle-button { margin-left: 0; margin-right: 10px; }
-      .tabs { padding-left: 5px; }
-      .tab { padding: 10px 12px; font-size: 0.9em;}
+  } catch (error) {
+    console.error('\n!!! Wystąpił błąd podczas wykonywania skryptu głównego:', error.message);
+    // error może zawierać stdout/stderr z execSync lub błąd z kopiowania
+    if (error.stack) {
+        console.error(error.stack);
     }
-    /* === KONIEC NOWYCH STYLÓW CSS === */
-  </style>
+    process.exit(1);
+  }
+}
+
+main();
