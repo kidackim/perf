@@ -1,13 +1,13 @@
-// Ten plik (report.js) zawiera logikę interakcji i rysowania wykresów dla raportu HTML.
+// Plik: report.js - POPRAWNA ZAWARTOŚĆ
+// Ten plik zawiera logikę interakcji i rysowania wykresów dla raportu HTML.
 
 /**
  * Przełącza widoczność szczegółów dla danego testcase.
  * @param {number} index - Indeks testcase'u do przełączenia.
  */
 function toggleTestCase(index) {
-    // Używamy querySelectorAll, aby upewnić się, że odnosimy się do właściwego elementu, nawet jeśli DOM się zmieni.
     const testcase = document.querySelectorAll('.testcases .testcase')[index];
-    const toggleButton = document.getElementById(`toggle-${index}`); // Używamy `` dla ID
+    const toggleButton = document.getElementById(`toggle-${index}`);
 
     if (testcase) {
         const isExpanded = testcase.classList.toggle('expanded');
@@ -24,20 +24,18 @@ function toggleTestCase(index) {
  * Inicjalizuje wszystkie funkcjonalności po załadowaniu DOM.
  */
 function initializeReport() {
-    console.log("Inicjalizacja raportu...");
+    console.log("Inicjalizacja raportu (report.js)...");
 
     // 1. Inicjalizacja filtrowania
     const searchInput = document.getElementById('searchInput');
     if (searchInput) {
         searchInput.addEventListener('input', function(e) {
             const searchTerm = e.target.value.toLowerCase().trim();
-            const testcases = document.querySelectorAll('.testcases .testcase'); // Dokładniejszy selektor
+            const testcases = document.querySelectorAll('.testcases .testcase');
 
             testcases.forEach(testcase => {
                 const name = (testcase.getAttribute('data-name') || '').toLowerCase();
                 const className = (testcase.getAttribute('data-classname') || '').toLowerCase();
-
-                // Pokaż jeśli pasuje lub jeśli search jest pusty
                 if (!searchTerm || name.includes(searchTerm) || className.includes(searchTerm)) {
                     testcase.style.display = '';
                 } else {
@@ -52,25 +50,19 @@ function initializeReport() {
 
     // 2. Inicjalizacja zakładek
     const tabs = document.querySelectorAll('.tabs .tab');
-    const tabContents = document.querySelectorAll('.container > .tab-content'); // Szukaj tylko bezpośrednich dzieci kontenera
+    const tabContents = document.querySelectorAll('.container > .tab-content');
 
     if (tabs.length > 0 && tabContents.length > 0) {
         tabs.forEach(tab => {
             tab.addEventListener('click', function() {
-                // Usuń 'active' ze wszystkich
                 tabs.forEach(t => t.classList.remove('active'));
                 tabContents.forEach(c => c.classList.remove('active'));
-
-                // Dodaj 'active' do klikniętej zakładki i jej zawartości
                 this.classList.add('active');
                 const tabId = this.getAttribute('data-tab');
                 const activeContent = document.getElementById(tabId);
-
                 if (activeContent) {
                     activeContent.classList.add('active');
                     console.log(`Aktywowano zakładkę: ${tabId}`);
-
-                    // Jeśli aktywowano zakładkę z wykresami i nie są zainicjalizowane, zrób to
                     if (tabId === 'charts' && typeof initializeCharts === 'function' && !window.chartsInitialized) {
                         console.log("Inicjalizowanie wykresów po kliknięciu zakładki...");
                         initializeCharts();
@@ -93,7 +85,6 @@ function initializeReport() {
             initializeCharts();
         }
     } else {
-         // To ostrzeżenie pojawi się, jeśli Chart.js się nie załaduje
          console.error("Biblioteka Chart.js nie została załadowana! Wykresy nie będą działać.");
     }
 }
@@ -102,18 +93,14 @@ function initializeReport() {
  * Inicjalizuje i rysuje wykresy Chart.js.
  */
 function initializeCharts() {
-     // Sprawdź, czy dane globalne są dostępne
      if (typeof window.reportData === 'undefined' || !window.reportData) {
          console.error("Brak danych 'window.reportData' do narysowania wykresów.");
          return;
      }
-     // Sprawdź, czy Chart jest załadowane
      if (typeof Chart === 'undefined'){
          console.error("Chart.js nie jest załadowane, nie można narysować wykresów.");
          return;
      }
-
-     // Ustaw flagę, aby uniknąć wielokrotnego rysowania
      if (window.chartsInitialized) {
         console.log("Wykresy już zainicjalizowane.");
         return;
@@ -127,111 +114,53 @@ function initializeCharts() {
          // Wykres 1: Status testów (Kołowy)
          const statusCtx = document.getElementById('statusChart');
          if (statusCtx && passFailData && passFailData.length > 0) {
-              new Chart(statusCtx.getContext('2d'), {
-                 type: 'pie',
-                 data: {
-                     labels: passFailData.map(item => item.label),
-                     datasets: [{
-                         data: passFailData.map(item => item.value),
-                         backgroundColor: passFailData.map(item => item.color),
-                         borderWidth: 1
-                     }]
-                 },
-                 options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } } }
-             });
+              new Chart(statusCtx.getContext('2d'), { /* ... konfiguracja ... */
+                type: 'pie',
+                data: { labels: passFailData.map(item => item.label), datasets: [{ data: passFailData.map(item => item.value), backgroundColor: passFailData.map(item => item.color), borderWidth: 1 }] },
+                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } } }
+              });
              console.log("Narysowano wykres statusu.");
-         } else if (!statusCtx) {
-             console.warn("Nie znaleziono canvas #statusChart.");
-         } else {
-             console.log("Brak danych (niezerowych) dla wykresu statusu.");
-             // Można tu opcjonalnie wyświetlić komunikat w miejscu wykresu
-         }
+         } else if (!statusCtx) { console.warn("Nie znaleziono canvas #statusChart."); }
+         else { console.log("Brak danych (niezerowych) dla wykresu statusu."); }
 
          // Wykres 2: Czasy odpowiedzi (Słupkowy poziomy)
          const responseTimeCtx = document.getElementById('responseTimeChart');
          if (responseTimeCtx && responseTimeData && responseTimeData.length > 0) {
-              new Chart(responseTimeCtx.getContext('2d'), {
-                 type: 'bar',
-                 data: {
-                     labels: responseTimeData.map(item => item.name), // Nazwy jako etykiety
-                     datasets: [{
-                         label: 'Czas odpowiedzi (ms)',
-                         data: responseTimeData.map(item => item.time), // Czasy jako dane
-                         backgroundColor: responseTimeData.map(item => item.color),
-                         borderWidth: 1
-                     }]
-                 },
-                 options: {
-                     indexAxis: 'y', // Oś Y jako kategoria (poziomy wykres)
-                     responsive: true,
-                     maintainAspectRatio: false,
-                     plugins: { legend: { display: false } }, // Ukryj legendę
-                     scales: { x: { beginAtZero: true, title: { display: true, text: 'Czas (ms)' } } } // Skala X z tytułem
-                 }
-             });
+              new Chart(responseTimeCtx.getContext('2d'), { /* ... konfiguracja ... */
+                type: 'bar',
+                data: { labels: responseTimeData.map(item => item.name), datasets: [{ label: 'Czas odpowiedzi (ms)', data: responseTimeData.map(item => item.time), backgroundColor: responseTimeData.map(item => item.color), borderWidth: 1 }] },
+                options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { beginAtZero: true, title: { display: true, text: 'Czas (ms)' } } } }
+              });
              console.log("Narysowano wykres czasów odpowiedzi.");
-         } else if (!responseTimeCtx) {
-              console.warn("Nie znaleziono canvas #responseTimeChart.");
-         } else {
-              console.log("Brak danych dla wykresu czasów odpowiedzi.");
-         }
+         } else if (!responseTimeCtx) {  console.warn("Nie znaleziono canvas #responseTimeChart."); }
+         else { console.log("Brak danych dla wykresu czasów odpowiedzi."); }
 
          // Wykres 3: Percentyle (Liniowy)
          const percentileCtx = document.getElementById('percentileChart');
          if (percentileCtx && percentileData && percentileData.length > 0) {
-             new Chart(percentileCtx.getContext('2d'), {
-                 type: 'line',
-                 data: {
-                     labels: percentileData.map(item => item.percentile + '%'), // Percentyle jako etykiety X
-                     datasets: [{
-                         label: 'Czas odpowiedzi (ms)',
-                         data: percentileData.map(item => item.value), // Wartości czasu jako dane Y
-                         borderColor: 'rgba(33, 150, 243, 1)',
-                         backgroundColor: 'rgba(33, 150, 243, 0.2)',
-                         borderWidth: 2,
-                         pointBackgroundColor: 'rgba(33, 150, 243, 1)',
-                         tension: 0.1, // Lekkie wygładzenie linii
-                         fill: true // Wypełnienie pod linią
-                     }]
-                 },
-                 options: {
-                     responsive: true,
-                     maintainAspectRatio: false,
-                     plugins: { legend: { position: 'bottom' } },
-                     scales: { y: { beginAtZero: true, title: { display: true, text: 'Czas (ms)' } } } // Skala Y z tytułem
-                 }
+             new Chart(percentileCtx.getContext('2d'), { /* ... konfiguracja ... */
+                type: 'line',
+                data: { labels: percentileData.map(item => item.percentile + '%'), datasets: [{ label: 'Czas odpowiedzi (ms)', data: percentileData.map(item => item.value), borderColor: 'rgba(33, 150, 243, 1)', backgroundColor: 'rgba(33, 150, 243, 0.2)', borderWidth: 2, pointBackgroundColor: 'rgba(33, 150, 243, 1)', tension: 0.1, fill: true }] },
+                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } }, scales: { y: { beginAtZero: true, title: { display: true, text: 'Czas (ms)' } } } }
              });
              console.log("Narysowano wykres percentyli.");
          } else if (percentileCtx && (!percentileData || percentileData.length === 0)) {
              console.log("Brak danych dla wykresu percentyli.");
-             // Można np. ukryć kontener wykresu percentyli, jeśli nie ma danych
-             const percentileContainer = percentileCtx.closest('.chart');
-             if(percentileContainer) percentileContainer.style.display = 'none';
-         } else if (!percentileCtx && percentileData && percentileData.length > 0) {
-             console.warn("Nie znaleziono canvas #percentileChart, mimo że dane istnieją.");
-         }
+             const percentileContainer = percentileCtx.closest('.chart'); if(percentileContainer) percentileContainer.style.display = 'none';
+         } else if (!percentileCtx && percentileData && percentileData.length > 0) { console.warn("Nie znaleziono canvas #percentileChart, mimo że dane istnieją."); }
 
      } catch (error) {
          console.error("Wystąpił błąd podczas inicjalizacji wykresów:", error);
-         // Można wyświetlić komunikat o błędzie w miejscu wykresów
-         const chartArea = document.getElementById('charts');
-         if (chartArea) {
-             chartArea.innerHTML = '<p style="color: red;">Wystąpił błąd podczas renderowania wykresów. Sprawdź konsolę przeglądarki.</p>';
-         }
+         const chartArea = document.getElementById('charts'); if (chartArea) { chartArea.innerHTML = '<p style="color: red;">Wystąpił błąd podczas renderowania wykresów. Sprawdź konsolę przeglądarki.</p>'; }
      }
 }
 
 // --- Główny punkt startowy skryptu ---
-
-// Ustawienie globalnej flagi inicjalizacji wykresów
 window.chartsInitialized = false;
+window.toggleTestCase = toggleTestCase; // Upewnij się, że jest globalna
 
-// Upewnienie się, że funkcje wywoływane z HTML (onclick) są globalne
-window.toggleTestCase = toggleTestCase;
-
-// Uruchomienie inicjalizacji po załadowaniu całego DOM
-if (document.readyState === 'loading') { // Obsługa, jeśli skrypt załaduje się przed końcem ładowania DOM
+if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', initializeReport);
-} else { // Jeśli DOM jest już gotowy
-    initializeReport();
+} else {
+    initializeReport(); // Jeśli DOM już jest gotowy
 }
