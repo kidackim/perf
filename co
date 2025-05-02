@@ -1,29 +1,43 @@
 import fs from 'fs';
-import path from 'path'; // Import path jest nadal przydatny np. do normalizacji ścieżek
+import path from 'path';
 import { DOMParser } from 'xmldom';
 
 /**
- * Konwertuje plik JUnit XML na raport HTML (bez JavaScript)
- * @param {string} xmlFilePath - Ścieżka do pliku XML
- * @param {string} outputHtmlPath - Ścieżka do pliku wyjściowego HTML
+ * Escapes HTML special characters to prevent XSS.
+ * @param {string | unknown} unsafe - The string to escape.
+ * @returns {string | unknown} - The escaped string or the original value if not a string.
  */
-function convertJUnitXmlToHtml(xmlFilePath, outputHtmlPath) { // Usunięto argumenty ścieżek JS
+const escapeHtml = (unsafe) => {
+  if (typeof unsafe !== 'string') return unsafe;
+  return unsafe
+       .replace(/&/g, "&amp;")
+       .replace(/</g, "&lt;")
+       .replace(/>/g, "&gt;")
+       .replace(/"/g, "&quot;")
+       .replace(/'/g, "&#039;");
+};
+
+/**
+ * Converts JUnit XML to an HTML report (JavaScript-free) with ING-like styling and English text.
+ * @param {string} xmlFilePath - Path to the XML file.
+ * @param {string} outputHtmlPath - Path for the output HTML file.
+ */
+function convertJUnitXmlToIngHtmlEn(xmlFilePath, outputHtmlPath) {
   try {
     const xmlContent = fs.readFileSync(xmlFilePath, 'utf-8');
     const parser = new DOMParser();
     const xmlDoc = parser.parseFromString(xmlContent, 'text/xml');
 
-    const testsuites = xmlDoc.getElementsByTagName('testsuites')[0]; // Może być użyte później do obsługi wielu suites
     const testsuite = xmlDoc.getElementsByTagName('testsuite')[0];
 
     if (!testsuite) {
-      throw new Error('Nie znaleziono elementu testsuite w pliku XML');
+      throw new Error('Could not find <testsuite> element in the XML file');
     }
 
-    const suiteName = testsuite.getAttribute('name') || 'Nieznana symulacja';
+    const suiteName = testsuite.getAttribute('name') || 'Unknown Simulation';
     const totalTests = parseInt(testsuite.getAttribute('tests') || '0', 10);
     const failures = parseInt(testsuite.getAttribute('failures') || '0', 10);
-    const errors = parseInt(testsuite.getAttribute('errors') || '0', 10); // Błędy często traktuje się jak failure w JUnit
+    const errors = parseInt(testsuite.getAttribute('errors') || '0', 10);
     const skipped = parseInt(testsuite.getAttribute('skipped') || '0', 10);
     const timestamp = testsuite.getAttribute('timestamp') || new Date().toISOString();
     const time = parseFloat(testsuite.getAttribute('time') || '0');
@@ -44,26 +58,22 @@ function convertJUnitXmlToHtml(xmlFilePath, outputHtmlPath) { // Usunięto argum
     for (let i = 0; i < testcaseNodes.length; i++) {
       const testcase = testcaseNodes[i];
       const className = testcase.getAttribute('classname') || '';
-      const name = testcase.getAttribute('name') || 'Nieznany test';
+      const name = testcase.getAttribute('name') || 'Unknown Test';
       const tcTime = parseFloat(testcase.getAttribute('time') || '0');
 
       const failureNodes = testcase.getElementsByTagName('failure');
-      const errorNodes = testcase.getElementsByTagName('error'); // Dodaj obsługę <error>
-      const hasFailure = failureNodes.length > 0 || errorNodes.length > 0;
+      const errorNodes = testcase.getElementsByTagName('error');
+      const hasFailure = failureNodes.length > 0 || errorNodes.length > 0; // Treat errors as failures for status
       let failureMessage = '';
       let failureType = '';
       let failureContent = '';
 
-      if (failureNodes.length > 0) {
-          const failure = failureNodes[0];
-          failureMessage = failure.getAttribute('message') || '';
-          failureType = failure.getAttribute('type') || 'Failure';
-          failureContent = failure.textContent || '';
-      } else if (errorNodes.length > 0) {
-          const error = errorNodes[0];
-          failureMessage = error.getAttribute('message') || '';
-          failureType = error.getAttribute('type') || 'Error';
-          failureContent = error.textContent || '';
+      // Prioritize <error> if both exist, otherwise take <failure>
+      const failureSourceNode = errorNodes.length > 0 ? errorNodes[0] : (failureNodes.length > 0 ? failureNodes[0] : null);
+      if (failureSourceNode) {
+          failureMessage = failureSourceNode.getAttribute('message') || '';
+          failureType = failureSourceNode.getAttribute('type') || (errorNodes.length > 0 ? 'Error' : 'Failure');
+          failureContent = failureSourceNode.textContent || '';
       }
 
 
@@ -73,34 +83,29 @@ function convertJUnitXmlToHtml(xmlFilePath, outputHtmlPath) { // Usunięto argum
         systemOut = systemOutNodes[0].textContent || '';
       }
 
-       const systemErrNodes = testcase.getElementsByTagName('system-err'); // Dodaj obsługę <system-err>
+       const systemErrNodes = testcase.getElementsByTagName('system-err');
        let systemErr = '';
        if (systemErrNodes.length > 0) {
            systemErr = systemErrNodes[0].textContent || '';
        }
 
       testcases.push({
-        className,
-        name,
-        time: tcTime,
-        hasFailure,
-        failureMessage,
-        failureType,
-        failureContent,
-        systemOut,
-        systemErr // Dodano systemErr
+        className, name, time: tcTime, hasFailure,
+        failureMessage, failureType, failureContent,
+        systemOut, systemErr
       });
     }
 
-    // Generuj HTML - bez ścieżek do JS
-    const html = generateHtml(suiteName, totalTests, failures + errors, /* failures i errors razem */ skipped, timestamp, time, properties, testcases, xmlContent);
+    // Combine failures and errors for the summary count
+    const failuresAndErrorsCount = failures + errors;
 
-    // Zapisz HTML do pliku z jawnym kodowaniem UTF-8
+    const html = generateIngStyleHtmlEn(suiteName, totalTests, failuresAndErrorsCount, skipped, timestamp, time, properties, testcases, xmlContent);
+
     fs.writeFileSync(outputHtmlPath, html, 'utf-8');
-    console.log(`Raport HTML został zapisany do pliku: ${outputHtmlPath}`);
+    console.log(`HTML report (ING Style, English) saved to: ${outputHtmlPath}`);
 
   } catch (error) {
-    console.error('Wystąpił błąd podczas konwersji:', error);
+    console.error('Error during conversion:', error);
     if (error.message) console.error("Message:", error.message);
     if (error.stack) console.error("Stack:", error.stack);
     process.exit(1);
@@ -108,44 +113,44 @@ function convertJUnitXmlToHtml(xmlFilePath, outputHtmlPath) { // Usunięto argum
 }
 
 /**
- * Generuje kod HTML raportu (bez JavaScript)
- * @param {string} suiteName - Nazwa testsuite
- * @param {number} totalTests - Liczba testów
- * @param {number} failuresAndErrors - Liczba niepowodzeń i błędów
- * @param {number} skipped - Liczba pominiętych testów
- * @param {string} timestamp - Znacznik czasu
- * @param {number} time - Czas wykonania
- * @param {Object} properties - Właściwości
- * @param {Array} testcases - Testcases
- * @param {string} xmlContent - Zawartość pliku XML
- * @returns {string} - Kod HTML
+ * Generates the HTML report code (ING Style, English, No JS).
+ * @param {string} suiteName
+ * @param {number} totalTests
+ * @param {number} failuresAndErrorsCount - Combined count of failures and errors.
+ * @param {number} skipped
+ * @param {string} timestamp
+ * @param {number} time
+ * @param {Object} properties
+ * @param {Array} testcases
+ * @param {string} xmlContent
+ * @returns {string} - HTML code string.
  */
-function generateHtml(suiteName, totalTests, failuresAndErrors, skipped, timestamp, time, properties, testcases, xmlContent) {
-  const passed = totalTests - failuresAndErrors - skipped;
+function generateIngStyleHtmlEn(suiteName, totalTests, failuresAndErrorsCount, skipped, timestamp, time, properties, testcases, xmlContent) {
+  const passed = totalTests - failuresAndErrorsCount - skipped;
   const successRate = totalTests > 0 ? (passed / totalTests * 100).toFixed(2) : '0.00';
 
-  // Przygotuj dane do wyświetlenia tekstowego (zamiast wykresów)
   const statusData = [
-    { label: 'Udane', value: passed, style: 'color: var(--success-color);' },
-    { label: 'Nieudane/Błędy', value: failuresAndErrors, style: 'color: var(--error-color);' },
-    { label: 'Pominięte', value: skipped, style: 'color: #9E9E9E;' }
+    { label: 'Passed', value: passed, style: 'color: var(--success-color);' },
+    { label: 'Failed / Errors', value: failuresAndErrorsCount, style: 'color: var(--error-color);' },
+    { label: 'Skipped', value: skipped, style: 'color: var(--skipped-color);' }
   ];
 
   const responseTimeData = testcases
-    .filter(tc => !tc.className.includes('Summary') && !tc.className.includes('Global'))
+    .filter(tc => !tc.className.includes('Summary') && !tc.className.includes('Global')) // Exclude summary/global pseudo-tests
     .map(tc => ({
       name: tc.name,
-      time: tc.time * 1000, // Konwersja na ms
-      status: tc.hasFailure ? 'Błąd' : 'OK'
+      time: tc.time * 1000, // Convert to ms
+      status: tc.hasFailure ? 'Failed' : 'Passed' // Use 'Failed'/'Passed' for status
     }))
-    .sort((a, b) => b.time - a.time)
-    .slice(0, 15); // Pokaż Top 15
+    .sort((a, b) => b.time - a.time) // Sort descending by time
+    .slice(0, 15); // Show Top 15
 
   const globalTestCase = testcases.find(tc => tc.className.includes('Global'));
 
   let percentileData = [];
    if (globalTestCase && globalTestCase.systemOut) {
      try {
+       // Regex to find "NNth percentile: NNNN"
        const percentileRegex = /(\d{1,3}(?:st|nd|rd|th) percentile).*?:\s*?(\d+)/gi;
        let match;
        while ((match = percentileRegex.exec(globalTestCase.systemOut)) !== null) {
@@ -159,185 +164,209 @@ function generateHtml(suiteName, totalTests, failuresAndErrors, skipped, timesta
        }
        percentileData.sort((a, b) => parseInt(a.percentile, 10) - parseInt(b.percentile, 10));
      } catch (e) {
-        console.error("Błąd podczas parsowania percentyli:", e);
-        percentileData = []; // Resetuj w razie błędu
+        console.error("Error parsing percentiles:", e);
+        percentileData = [];
      }
    }
 
-  // Funkcja do bezpiecznego wstawiania HTML (zapobiega XSS)
-  const escapeHtml = (unsafe) => {
-    if (typeof unsafe !== 'string') return unsafe;
-    return unsafe
-         .replace(/&/g, "&amp;")
-         .replace(/</g, "&lt;")
-         .replace(/>/g, "&gt;")
-         .replace(/"/g, "&quot;")
-         .replace(/'/g, "&#039;");
-  };
-
-  // Generuj HTML
   return `<!DOCTYPE html>
-<html lang="pl">
+<html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Raport testów wydajnościowych - ${escapeHtml(suiteName)}</title>
+<title>Test Report - ${escapeHtml(suiteName)}</title>
 <style>
-  /* --- Podstawowe style --- */
   :root {
-    --primary-color: #2196F3;
+    --ing-orange: #FF6600;
+    --ing-navy: #003B5C;
     --success-color: #4CAF50;
-    --warning-color: #FF9800; /* Nadal może być użyte */
-    --error-color: #F44336;
-    --text-color: #333;
-    --background-color: #f5f5f5;
-    --card-background: #fff;
-    --border-color: #ddd;
-    --pre-background: #e9ecef;
+    --error-color: #D32F2F;
+    --skipped-color: #757575;
+    --text-color: #333333;
+    --text-light: #FFFFFF;
+    --background-light: #F7F7F7;
+    --background-white: #FFFFFF;
+    --border-color: #E0E0E0;
+    --pre-background: #F0F0F0;
   }
   body {
-    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
     line-height: 1.6;
     color: var(--text-color);
-    background-color: var(--background-color);
+    background-color: var(--background-light);
     margin: 0;
     padding: 20px;
   }
   .container {
-    max-width: 1200px;
+    max-width: 1140px;
     margin: 0 auto;
   }
   header {
-    text-align: center;
+    background-color: var(--ing-navy);
+    color: var(--text-light);
+    padding: 20px 30px;
     margin-bottom: 30px;
-    padding-bottom: 15px;
-    border-bottom: 1px solid var(--border-color);
+    border-radius: 8px 8px 0 0;
   }
-  h1, h2, h3, h4 {
-    color: var(--primary-color);
-    margin-top: 1.5em;
-    margin-bottom: 0.5em;
+  header h1 {
+    color: var(--ing-orange);
+    margin: 0 0 5px 0;
+    font-size: 2.2em;
+    font-weight: bold;
   }
-  h1 { font-size: 2em; }
-  h2 { font-size: 1.75em; border-bottom: 1px solid #eee; padding-bottom: 0.3em;}
-  h3 { font-size: 1.5em; }
-  h4 { font-size: 1.2em; color: #555; }
-
+  header h2 {
+    color: var(--text-light);
+    margin: 0 0 10px 0;
+    font-size: 1.5em;
+    font-weight: normal;
+  }
+  header p {
+    margin: 0;
+    font-size: 0.9em;
+    opacity: 0.9;
+  }
+  h3 {
+    color: var(--ing-navy);
+    border-bottom: 2px solid var(--ing-orange);
+    padding-bottom: 8px;
+    margin-top: 1.8em;
+    margin-bottom: 1em;
+    font-size: 1.6em;
+  }
+   h4 {
+       color: var(--ing-navy);
+       margin-top: 1.5em;
+       margin-bottom: 0.8em;
+       font-size: 1.2em;
+   }
   .card {
-    background-color: var(--card-background);
-    border-radius: 8px;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    background-color: var(--background-white);
+    border-radius: 0 0 8px 8px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
     margin-bottom: 25px;
-    padding: 20px;
+    padding: 20px 25px;
     overflow: hidden;
   }
-
-  /* --- Sekcja Podsumowanie --- */
-  .summary-grid { /* Zmieniono nazwę z .summary */
+   section.card:first-of-type {
+       margin-top: -30px;
+       border-radius: 8px;
+       position: relative;
+       z-index: 1;
+   }
+  .summary-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); /* Bardziej elastyczny grid */
-    gap: 15px;
-    margin-bottom: 20px; /* Zmniejszony margines */
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 20px;
+    margin-bottom: 20px;
   }
   .summary-item {
-    padding: 15px;
-    border-radius: 8px;
+    padding: 20px;
+    border-radius: 6px;
     text-align: center;
-    color: white; /* Domyślny kolor tekstu dla kart */
-    box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+    color: var(--text-light);
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    transition: transform 0.2s ease;
   }
-  .summary-item h4 { /* Używamy h4 dla nagłówków w kartach */
-    margin-top: 0;
-    margin-bottom: 8px;
-    font-size: 0.9em; /* Mniejszy nagłówek */
-    font-weight: normal;
-    color: inherit; /* Dziedzicz kolor z rodzica (biały) */
+   .summary-item:hover {
+       transform: translateY(-3px);
+   }
+  .summary-item h4 {
+    margin: 0 0 8px 0;
+    font-size: 0.9em;
+    font-weight: 500;
+    color: inherit;
     text-transform: uppercase;
     letter-spacing: 0.5px;
+    opacity: 0.9;
   }
   .summary-item p {
-    margin-bottom: 0;
-    font-size: 1.8em; /* Większa liczba */
+    margin: 0;
+    font-size: 2em;
     font-weight: bold;
     color: inherit;
   }
+  .summary-item.info { background-color: var(--ing-orange); }
   .summary-item.success { background-color: var(--success-color); }
   .summary-item.error { background-color: var(--error-color); }
-  .summary-item.skipped { background-color: #9E9E9E; } /* Szary dla pominiętych */
-  .summary-item.info { background-color: var(--primary-color); }
-  .summary-item.rate { background-color: var(--warning-color); } /* Pomarańczowy dla % sukcesu */
-
-  /* --- Tabela Właściwości i Danych Agregowanych --- */
-  .data-table { /* Zmieniono nazwę z .properties-table */
+  .summary-item.skipped { background-color: var(--skipped-color); }
+  .summary-item.rate { background-color: var(--ing-navy); }
+  .data-table {
     width: 100%;
     border-collapse: collapse;
     margin-bottom: 20px;
+    border: 1px solid var(--border-color);
   }
   .data-table th, .data-table td {
-    padding: 10px 12px;
+    padding: 12px 15px;
     border: 1px solid var(--border-color);
     text-align: left;
-    vertical-align: top; /* Lepsze wyrównanie przy długiej treści */
+    vertical-align: top;
     word-break: break-word;
   }
   .data-table th {
-    background-color: var(--pre-background);
-    color: var(--text-color);
+    background-color: #E9EDF0;
+    color: var(--ing-navy);
     font-weight: 600;
+    font-size: 0.95em;
   }
-  .data-table tr:nth-child(even) {
-    background-color: rgba(0,0,0,0.02);
+  .data-table tr:nth-child(even) td {
+    background-color: #F8FAFB;
   }
   .data-table td:first-child {
     font-weight: 500;
-    width: 25%; /* Szerokość pierwszej kolumny */
+    width: 28%;
+     color: var(--ing-navy);
   }
-   .data-table .value-ok { color: var(--success-color); font-weight: bold; }
-   .data-table .value-error { color: var(--error-color); font-weight: bold; }
-   .data-table .value-skipped { color: #9E9E9E; }
-
-  /* --- Sekcja Szczegóły Testów --- */
-  .testcases-section { /* Kontener dla sekcji testów */
+   .data-table .value-passed { color: var(--success-color); font-weight: bold; }
+   .data-table .value-failed { color: var(--error-color); font-weight: bold; }
+   .data-table .value-skipped { color: var(--skipped-color); } /* Style for skipped if needed in tables */
+  .testcases-section {
      margin-top: 30px;
   }
-  .testcase { /* Styl dla elementu <details> */
-    margin-bottom: 10px;
-    border-radius: 8px;
-    background-color: var(--card-background);
-    box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+   #details-section > h3 {
+       border-bottom-color: var(--ing-navy);
+   }
+  .testcase {
+    margin-bottom: 12px;
+    border-radius: 6px;
+    background-color: var(--background-white);
+    box-shadow: 0 1px 2px rgba(0,0,0,0.08);
+    border: 1px solid var(--border-color);
     overflow: hidden;
-    border: 1px solid var(--border-color); /* Dodano lekką ramkę */
   }
-  .testcase[open] summary { /* Styl dla <summary> gdy <details> jest otwarte */
+  .testcase[open] {
+      border-color: var(--ing-orange);
+      box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+  }
+  .testcase[open] summary {
+     background-color: #FFF9F2;
      border-bottom: 1px solid var(--border-color);
-     background-color: #f8f9fa; /* Lekkie tło dla otwartego nagłówka */
   }
-  .testcase summary { /* Styl dla elementu <summary> */
+  .testcase summary {
     display: flex;
     justify-content: space-between;
     align-items: center;
     cursor: pointer;
     padding: 12px 15px;
-    background-color: #fff; /* Domyślne tło */
-    font-weight: bold;
-    outline: none; /* Usuń domyślny outline przy focusie */
+    font-weight: 600;
+    color: var(--ing-navy);
+    outline: none;
     transition: background-color 0.2s ease;
+    position: relative;
   }
    .testcase summary:hover {
-       background-color: #f8f9fa; /* Lekkie tło przy najechaniu */
+       background-color: #F1F3F5;
    }
-   /* Domyślna strzałka dla <details> */
-   .testcase summary::marker { /* Stylizacja domyślnej strzałki */
-      color: var(--primary-color);
-      font-size: 1.1em;
+   .testcase summary::marker {
+      color: var(--ing-orange);
+      font-size: 1.2em;
    }
-   /* Można też użyć własnej ikony przez ::before lub ::after */
-
-  .testcase-summary-content { /* Kontener na zawartość w <summary> */
+  .testcase-summary-content {
       display: flex;
       flex-grow: 1;
       align-items: center;
-      margin-left: 8px; /* Odstęp od domyślnej strzałki */
+      margin-left: 8px;
+      flex-wrap: wrap;
   }
   .testcase-name {
     flex-grow: 1;
@@ -346,159 +375,145 @@ function generateHtml(suiteName, totalTests, failuresAndErrors, skipped, timesta
   }
   .testcase-time {
     font-size: 0.9em;
-    color: #6c757d;
+    color: #555;
     white-space: nowrap;
-    margin-left: 10px;
-    font-weight: normal; /* Czas nie pogrubiony */
+    margin-left: auto;
+    padding-left: 15px;
+    font-weight: normal;
   }
   .testcase-status {
-    padding: 4px 8px;
-    border-radius: 4px;
+    padding: 3px 8px;
+    border-radius: 12px;
     margin-left: 10px;
-    font-size: 0.85em;
+    font-size: 0.8em;
     white-space: nowrap;
-    font-weight: bold; /* Status pogrubiony */
+    font-weight: bold;
+    color: var(--text-light);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
   }
-  .testcase-status.success { background-color: var(--success-color); color: white; }
-  .testcase-status.failure { background-color: var(--error-color); color: white; }
-
-  .testcase-details { /* Styl dla zawartości wewnątrz <details> */
-    padding: 15px;
-    background-color: #fff; /* Tło detali */
-    border-top: 1px solid var(--border-color); /* Linia oddzielająca */
+  .testcase-status.passed { background-color: var(--success-color); } /* Use 'passed' class */
+  .testcase-status.failed { background-color: var(--error-color); } /* Use 'failed' class */
+  .testcase-details {
+    padding: 15px 20px;
+    background-color: var(--background-white);
+    border-top: 1px solid var(--border-color);
+    font-size: 0.95em;
   }
   .testcase-details pre {
     background-color: var(--pre-background);
-    padding: 10px 15px; /* Zwiększony padding */
+    padding: 12px 15px;
     border-radius: 4px;
     white-space: pre-wrap;
     word-wrap: break-word;
-    font-family: Consolas, Monaco, 'Andale Mono', 'Ubuntu Mono', monospace;
+    font-family: 'SF Mono', Consolas, Monaco, 'Andale Mono', 'Ubuntu Mono', monospace;
     font-size: 0.9em;
-    max-height: 400px; /* Zwiększono max-height */
+    max-height: 400px;
     overflow-y: auto;
-    margin-top: 5px;
-    margin-bottom: 15px; /* Większy odstęp na dole */
-    border: 1px solid #ccc; /* Dodano ramkę dla pre */
+    margin: 8px 0 15px 0;
+    border: 1px solid #D5DDE2;
+    color: #333;
   }
   .testcase-details p {
-    margin-top: 5px;
-    margin-bottom: 8px; /* Zwiększony odstęp */
+    margin: 5px 0 10px 0;
     line-height: 1.5;
   }
   .testcase-details strong {
-    color: #333; /* Ciemniejszy kolor dla "strong" */
+    color: var(--ing-navy);
+    font-weight: 600;
     margin-right: 5px;
   }
-  .testcase-details .detail-label { /* Etykieta dla szczegółów */
-     font-weight: bold;
-     color: var(--primary-color);
-     display: block; /* Etykieta w nowej linii */
-     margin-bottom: 3px;
-  }
-   .failure-details { /* Kontener dla szczegółów błędu */
+  .failure-details {
        border: 1px solid var(--error-color);
-       border-left-width: 5px;
-       padding: 10px;
-       margin-top: 10px;
-       background-color: #fff7f7;
+       border-left: 4px solid var(--error-color);
+       padding: 12px 15px;
+       margin: 15px 0;
+       background-color: #FFF4F4;
    }
    .failure-details p { margin: 5px 0; }
-   .failure-details pre { background-color: #ffebeb; border-color: #fcc; }
-
-
-  /* --- Sekcja Surowy XML --- */
+   .failure-details pre { background-color: #FEE; border-color: #FBB; }
   .raw-xml-container pre {
-    max-height: 600px; /* Większa wysokość dla XML */
-    background-color: #282c34; /* Ciemne tło */
-    color: #abb2bf; /* Jasny tekst */
+    max-height: 600px;
+    background-color: #F8F9FA;
+    color: var(--text-color);
     padding: 15px;
     border-radius: 4px;
     border: 1px solid var(--border-color);
-    overflow: auto; /* Scrollbary w obu kierunkach */
-    white-space: pre; /* Zachowaj białe znaki, ale bez zawijania */
+    overflow: auto;
+    white-space: pre;
+    font-family: 'SF Mono', Consolas, Monaco, 'Andale Mono', 'Ubuntu Mono', monospace;
+    font-size: 0.85em;
   }
-
-  /* --- Media Queries --- */
   @media (max-width: 768px) {
-    .summary-grid {
-       grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); /* Mniejsze karty na mobilnych */
-    }
-    .testcase summary {
-        flex-wrap: wrap; /* Pozwól zawijać elementy nagłówka */
-    }
-    .testcase-name {
-       flex-basis: 100%; /* Nazwa zajmuje całą szerokość */
-       margin-bottom: 8px; /* Odstęp pod nazwą */
-       margin-right: 0;
-    }
-    .testcase-time, .testcase-status {
-       margin-left: 0;
-       margin-right: 10px; /* Odstęp między czasem a statusem */
-       margin-top: 5px; /* Mały odstęp od góry */
-    }
-     .data-table td:first-child {
-       width: 35%; /* Więcej miejsca na nazwy na mobilnych */
-    }
+    header { padding: 15px 20px; }
+    header h1 { font-size: 1.8em; }
+    header h2 { font-size: 1.2em; }
+    .container { padding: 10px; }
+    body { padding: 0; }
+    .card { padding: 15px; }
+    section.card:first-of-type { margin-top: -20px; }
+    .summary-grid { grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px;}
+    .summary-item { padding: 15px; }
+    .summary-item p { font-size: 1.8em; }
+    .testcase summary { padding: 10px 12px; }
+    .testcase-name { margin-bottom: 5px; }
+    .testcase-time { margin-left: 0; padding-left: 0; width: 100%; text-align: right; margin-top: 3px;}
+    .testcase-status { margin-left: 0; margin-top: 3px; }
+    .testcase-summary-content { margin-left: 5px; }
+    .data-table td, .data-table th { padding: 8px 10px; }
+     .data-table td:first-child { width: 40%; }
   }
-
 </style>
 </head>
 <body>
 <div class="container">
   <header>
-    <h1>Raport testów wydajnościowych</h1>
+    <h1>Test Execution Report</h1>
     <h2>${escapeHtml(suiteName)}</h2>
-    <p>Data generacji: ${new Date(timestamp).toLocaleString('pl-PL')}</p>
+    <p>Generated on: ${new Date(timestamp).toLocaleString('en-US')}</p> {/* Changed locale */}
   </header>
 
   <section id="summary-section" class="card">
-    <h3>Podsumowanie wyników</h3>
+    <h3>Summary</h3> {/* Translated */}
     <div class="summary-grid">
       <div class="summary-item info">
-        <h4>Wszystkie testy</h4>
+        <h4>Total</h4> {/* Translated */}
         <p>${totalTests}</p>
       </div>
       <div class="summary-item success">
-        <h4>Udane</h4>
+        <h4>Passed</h4> {/* Translated */}
         <p>${passed}</p>
       </div>
       <div class="summary-item error">
-        <h4>Nieudane / Błędy</h4>
-        <p>${failuresAndErrors}</p>
+        <h4>Failed / Errors</h4> {/* Translated */}
+        <p>${failuresAndErrorsCount}</p>
       </div>
       ${skipped > 0 ? `
       <div class="summary-item skipped">
-        <h4>Pominięte</h4>
+        <h4>Skipped</h4> {/* Translated */}
         <p>${skipped}</p>
       </div>` : ''}
       <div class="summary-item rate">
-        <h4>Sukces (%)</h4>
+        <h4>Success Rate (%)</h4> {/* Translated */}
         <p>${successRate}%</p>
       </div>
       <div class="summary-item info">
-        <h4>Całkowity czas (s)</h4>
-        <p>${time.toFixed(3)}</p> {/* Dokładniejszy czas */}
+        <h4>Time (s)</h4> {/* Translated */}
+        <p>${time.toFixed(3)}</p>
       </div>
     </div>
   </section>
 
   ${Object.keys(properties).length > 0 ? `
   <section id="properties-section" class="card">
-    <h3>Właściwości testu</h3>
+    <h3>Run Properties</h3> {/* Translated */}
     <table class="data-table">
       <thead>
-        <tr>
-          <th>Właściwość</th>
-          <th>Wartość</th>
-        </tr>
+        <tr><th>Property</th><th>Value</th></tr> {/* Translated */}
       </thead>
       <tbody>
         ${Object.entries(properties).map(([key, value]) => `
-          <tr>
-            <td>${escapeHtml(key)}</td>
-            <td>${escapeHtml(value)}</td>
-          </tr>
+          <tr><td>${escapeHtml(key)}</td><td>${escapeHtml(value)}</td></tr>
         `).join('')}
       </tbody>
     </table>
@@ -507,87 +522,78 @@ function generateHtml(suiteName, totalTests, failuresAndErrors, skipped, timesta
 
    ${globalTestCase ? `
    <section id="global-stats-section" class="card">
-     <h3>Globalne statystyki (system-out)</h3>
-     <pre>${escapeHtml(globalTestCase.systemOut.trim())}</pre>
-     ${globalTestCase.systemErr ? `<h4>Globalne błędy (system-err)</h4><pre>${escapeHtml(globalTestCase.systemErr.trim())}</pre>`: ''}
+     <h3>Global Stats / Logs</h3> {/* Translated */}
+     ${globalTestCase.systemOut ? `<h4>System Out</h4><pre>${escapeHtml(globalTestCase.systemOut.trim())}</pre>`: ''}
+     ${globalTestCase.systemErr ? `<h4>System Err</h4><pre>${escapeHtml(globalTestCase.systemErr.trim())}</pre>`: ''}
    </section>
    ` : ''}
 
    <section id="aggregated-data-section" class="card">
-       <h3>Dane Agregowane</h3>
-
-       <h4>Podział statusów testów</h4>
+       <h3>Aggregated Data</h3> {/* Translated */}
+       <h4>Status Breakdown</h4> {/* Translated */}
        <table class="data-table">
-         <thead><tr><th>Status</th><th>Liczba</th></tr></thead>
+         <thead><tr><th>Status</th><th>Count</th></tr></thead> {/* Translated */}
          <tbody>
            ${statusData.map(item => `<tr><td><span style="${item.style}">${escapeHtml(item.label)}</span></td><td>${item.value}</td></tr>`).join('')}
-           <tr><td><strong>Suma</strong></td><td><strong>${totalTests}</strong></td></tr>
+           <tr><td><strong>Total</strong></td><td><strong>${totalTests}</strong></td></tr> {/* Translated */}
          </tbody>
        </table>
 
        ${responseTimeData.length > 0 ? `
-       <h4>Najdłuższe czasy odpowiedzi (Top ${responseTimeData.length}, ms)</h4>
+       <h4>Longest Response Times (Top ${responseTimeData.length})</h4> {/* Translated */}
        <table class="data-table">
-           <thead><tr><th>Nazwa testu</th><th>Czas (ms)</th><th>Status</th></tr></thead>
+           <thead><tr><th>Test Name</th><th>Time (ms)</th><th>Status</th></tr></thead> {/* Translated */}
            <tbody>
              ${responseTimeData.map(item => `
                <tr>
                  <td>${escapeHtml(item.name)}</td>
                  <td>${item.time.toFixed(0)}</td>
-                 <td class="${item.status === 'OK' ? 'value-ok' : 'value-error'}">${item.status}</td>
+                 <td class="${item.status === 'Passed' ? 'value-passed' : 'value-failed'}">${item.status}</td> {/* Use value-passed/failed */}
                 </tr>
              `).join('')}
            </tbody>
-       </table>` : '<p>Brak danych o czasach odpowiedzi dla poszczególnych testów (poza Global/Summary).</p>'}
+       </table>` : '<p>No response time data available for individual tests.</p>'} {/* Translated */}
 
        ${percentileData.length > 0 ? `
-       <h4>Percentyle czasów odpowiedzi (ms)</h4>
+       <h4>Response Time Percentiles</h4> {/* Translated */}
        <table class="data-table">
-           <thead><tr><th>Percentyl</th><th>Czas (ms)</th></tr></thead>
+           <thead><tr><th>Percentile</th><th>Time (ms)</th></tr></thead> {/* Translated */}
            <tbody>
              ${percentileData.map(item => `<tr><td>${escapeHtml(item.percentile)}th</td><td>${item.value}</td></tr>`).join('')}
            </tbody>
-       </table>` : (globalTestCase ? '<p>Nie znaleziono danych o percentylach w formacie "NNth percentile: NNNN" w globalnym system-out.</p>' : '')}
+       </table>` : (globalTestCase ? '<p>Percentile data not found in the global log.</p>' : '')} {/* Translated */}
    </section>
 
-
   <section id="details-section" class="testcases-section">
-    <h2>Szczegóły Testów</h2>
-    ${testcases.length === 0 ? '<div class="card"><p>Nie znaleziono przypadków testowych w pliku.</p></div>' : ''}
+    <h3>Test Details</h3> {/* Translated */}
+    ${testcases.length === 0 ? '<div class="card"><p>No test cases found.</p></div>' : ''} {/* Translated */}
     ${testcases.map((testcase) => `
       <details class="testcase">
         <summary class="testcase-header">
           <div class="testcase-summary-content">
               <span class="testcase-name">${escapeHtml(testcase.name)}</span>
-              <span class="testcase-time">${(testcase.time * 1000).toFixed(0)} ms</span>
-              <span class="testcase-status ${testcase.hasFailure ? 'failure' : 'success'}">${testcase.hasFailure ? 'Błąd' : 'OK'}</span>
           </div>
+           <span class="testcase-time">${(testcase.time * 1000).toFixed(0)} ms</span>
+           <span class="testcase-status ${testcase.hasFailure ? 'failed' : 'passed'}">${testcase.hasFailure ? 'Failed' : 'Passed'}</span> {/* Use 'failed'/'passed' class + text */}
         </summary>
         <div class="testcase-details">
-          <p><strong>Klasa:</strong> ${escapeHtml(testcase.className)}</p>
-          <p><strong>Czas wykonania:</strong> ${(testcase.time * 1000).toFixed(3)} ms</p>
-          <p><strong>Status:</strong> <span style="font-weight: bold; color: ${testcase.hasFailure ? 'var(--error-color)' : 'var(--success-color)'};">${testcase.hasFailure ? 'Nieudany/Błąd' : 'Udany'}</span></p>
+          <p><strong>Class:</strong> ${escapeHtml(testcase.className)}</p> {/* Translated */}
+          <p><strong>Time:</strong> ${(testcase.time * 1000).toFixed(3)} ms</p> {/* Translated */}
+          <p><strong>Status:</strong> <span style="font-weight: bold; color: ${testcase.hasFailure ? 'var(--error-color)' : 'var(--success-color)'};">${testcase.hasFailure ? 'Failed / Error' : 'Passed'}</span></p> {/* Translated */}
 
           ${testcase.hasFailure ? `
             <div class="failure-details">
-              <span class="detail-label">Szczegóły błędu/niepowodzenia:</span>
-              <p><strong>Typ:</strong> ${escapeHtml(testcase.failureType)}</p>
-              ${testcase.failureMessage ? `<p><strong>Komunikat:</strong> ${escapeHtml(testcase.failureMessage)}</p>` : ''}
-              ${testcase.failureContent ? `<p><strong>Stos wywołań / Szczegóły:</strong></p><pre>${escapeHtml(testcase.failureContent.trim())}</pre>` : ''}
+              <p><strong>Failure Type:</strong> ${escapeHtml(testcase.failureType)}</p> {/* Translated */}
+              ${testcase.failureMessage ? `<p><strong>Message:</strong> ${escapeHtml(testcase.failureMessage)}</p>` : ''} {/* Translated */}
+              ${testcase.failureContent ? `<strong>Details / Stack:</strong><pre>${escapeHtml(testcase.failureContent.trim())}</pre>` : ''} {/* Translated */}
             </div>
           ` : ''}
 
           ${testcase.systemOut ? `
-            <div>
-              <span class="detail-label">Log (system-out):</span>
-              <pre>${escapeHtml(testcase.systemOut.trim())}</pre>
-            </div>
-          ` : ''}
+            <div><strong>Log (system-out):</strong><pre>${escapeHtml(testcase.systemOut.trim())}</pre></div>
+          ` : ''} {/* Translated */}
            ${testcase.systemErr ? `
-            <div>
-              <span class="detail-label">Log błędów (system-err):</span>
-              <pre style="border-color: var(--warning-color); background-color: #fffbeb;">${escapeHtml(testcase.systemErr.trim())}</pre> {/* Lekko inne tło dla stderr */}
-            </div>
+            <div><strong>Error Log (system-err):</strong><pre>${escapeHtml(testcase.systemErr.trim())}</pre></div> {/* Translated */}
           ` : ''}
         </div>
       </details>
@@ -595,7 +601,7 @@ function generateHtml(suiteName, totalTests, failuresAndErrors, skipped, timesta
   </section>
 
   <section id="raw-xml-section" class="card raw-xml-container">
-    <h3>Surowe dane XML</h3>
+    <h3>Raw XML Data</h3> {/* Translated */}
     <pre>${escapeHtml(xmlContent)}</pre>
   </section>
 
@@ -605,29 +611,26 @@ function generateHtml(suiteName, totalTests, failuresAndErrors, skipped, timesta
 }
 
 /**
- * Główna funkcja programu
+ * Main program function
  */
 function main() {
   const args = process.argv.slice(2);
 
   if (args.length < 1) {
-    console.log("Użycie: node junit_to_html_nojs.js <plik_junit.xml> [plik_wyjściowy.html]");
-    console.log("Przykład: node junit_to_html_nojs.js results.xml report.html");
+    console.log("Usage: node junit_to_ing_html_en.js <junit_results.xml> [output_report.html]"); // Updated usage
+    console.log("Example: node junit_to_ing_html_en.js results.xml report-ing-en.html"); // Updated example
     process.exit(1);
   }
 
   const xmlFilePath = args[0];
-  // Jeśli podano drugi argument, użyj go jako ścieżki wyjściowej, w przeciwnym razie zamień .xml na .html
   const outputHtmlPath = args.length > 1 ? args[1] : xmlFilePath.replace(/\.xml$/, '.html');
 
   if (!fs.existsSync(xmlFilePath)) {
-    console.error(`Błąd: Plik ${xmlFilePath} nie istnieje.`);
+    console.error(`Error: Input file ${xmlFilePath} not found.`);
     process.exit(1);
   }
 
-  // Wywołaj funkcję konwertującą bez ścieżek do JS
-  convertJUnitXmlToHtml(xmlFilePath, outputHtmlPath);
+  convertJUnitXmlToIngHtmlEn(xmlFilePath, outputHtmlPath); // Call the updated function
 }
 
-// Uruchomienie programu
 main();
