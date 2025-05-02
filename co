@@ -1,75 +1,670 @@
-import { execSync } from 'child_process';
-import { existsSync, readdirSync, statSync, mkdirSync } from 'fs';
-import { join } from 'path';
+import fs from 'fs';
+import path from 'path'; // Dodaj import path
+import { DOMParser } from 'xmldom';
+// import { fileURLToPath } from 'url'; // Nie jest używane w tym kodzie
 
-function findLatestDir(baseDir) {
-  const dirs = readdirSync(baseDir, { withFileTypes: true })
-    .filter(dirent => dirent.isDirectory() && dirent.name.startsWith('jssimulation-'))
-    .map(dirent => ({
-      name: dirent.name,
-      path: join(baseDir, dirent.name),
-      time: statSync(join(baseDir, dirent.name)).mtime.getTime(),
-    }))
-    .sort((a, b) => b.time - a.time);
-
-  return dirs.length > 0 ? dirs[0].path : null;
-}
-
-async function main() {
-  const GATLING_DIR = 'target/gatling';
-
-  if (!existsSync(GATLING_DIR)) {
-    console.error(`Błąd: Katalog ${GATLING_DIR} nie istnieje.`);
-    process.exit(1);
-  }
-
-  const LATEST_DIR = findLatestDir(GATLING_DIR);
-
-  if (!LATEST_DIR) {
-    console.error(`Błąd: Nie znaleziono katalogów jssimulation-* w ${GATLING_DIR}.`);
-    process.exit(1);
-  }
-
-  console.log(`Znaleziono najnowszy katalog: ${LATEST_DIR}`);
-
-  const STATS_FILE = join(LATEST_DIR, 'js', 'stats.js');
-
-  if (!existsSync(STATS_FILE)) {
-    console.error(`Błąd: Nie znaleziono pliku ${STATS_FILE}.`);
-    process.exit(1);
-  }
-
-  console.log(`Znaleziono plik stats.js: ${STATS_FILE}`);
-
-  // Ścieżki do plików wynikowych w folderze target/gatling
-  const XML_FILE = join(GATLING_DIR, 'TEST-gatling-results.xml');
-  const HTML_FILE = join(GATLING_DIR, 'gatling-report.html');
-
+/**
+ * Konwertuje plik JUnit XML na raport HTML
+ * @param {string} xmlFilePath - Ścieżka do pliku XML
+ * @param {string} outputHtmlPath - Ścieżka do pliku wyjściowego HTML
+ * @param {string} chartJsPath - Ścieżka do pliku Chart.js (względna do HTML lub bezwzględna na serwerze build)
+ * @param {string} reportJsPath - Ścieżka do pliku report.js (względna do HTML)
+ */
+function convertJUnitXmlToHtml(xmlFilePath, outputHtmlPath, chartJsPath = 'chart.umd.min.js', reportJsPath = 'report.js') { // Dodano ścieżki jako argumenty
   try {
-    console.log('Generowanie raportu XML...');
-    execSync(`node toXML.mjs "${STATS_FILE}" "${XML_FILE}"`, { stdio: 'inherit' });
+    const xmlContent = fs.readFileSync(xmlFilePath, 'utf-8');
+    const parser = new DOMParser();
+    const xmlDoc = parser.parseFromString(xmlContent, 'text/xml');
 
-    if (!existsSync(XML_FILE)) {
-      console.error(`Błąd: Nie udało się wygenerować pliku ${XML_FILE}.`);
-      process.exit(1);
-    }
+    // ... (reszta logiki parsowania XML - bez zmian) ...
+     const testsuites = xmlDoc.getElementsByTagName('testsuites')[0];
+     const testsuite = xmlDoc.getElementsByTagName('testsuite')[0];
 
-    console.log(`Raport XML został wygenerowany: ${XML_FILE}`);
+     if (!testsuite) {
+       throw new Error('Nie znaleziono elementu testsuite w pliku XML');
+     }
 
-    console.log('Generowanie raportu HTML...');
-    execSync(`node toHTML.mjs "${XML_FILE}" "${HTML_FILE}"`, { stdio: 'inherit' });
+     const suiteName = testsuite.getAttribute('name') || 'Nieznana symulacja';
+     const totalTests = parseInt(testsuite.getAttribute('tests') || '0', 10);
+     const failures = parseInt(testsuite.getAttribute('failures') || '0', 10);
+     const errors = parseInt(testsuite.getAttribute('errors') || '0', 10);
+     const skipped = parseInt(testsuite.getAttribute('skipped') || '0', 10);
+     const timestamp = testsuite.getAttribute('timestamp') || new Date().toISOString();
+     const time = parseFloat(testsuite.getAttribute('time') || '0');
 
-    if (!existsSync(HTML_FILE)) {
-      console.error(`Błąd: Nie udało się wygenerować pliku ${HTML_FILE}.`);
-      process.exit(1);
-    }
+     const properties = {};
+     const propertyNodes = testsuite.getElementsByTagName('property');
+     for (let i = 0; i < propertyNodes.length; i++) {
+       const property = propertyNodes[i];
+       const name = property.getAttribute('name');
+       const value = property.getAttribute('value');
+       if (name && value) {
+         properties[name] = value;
+       }
+     }
 
-    console.log(`Raport HTML został wygenerowany: ${HTML_FILE}`);
-    console.log('Proces zakończony pomyślnie.');
+     const testcases = [];
+     const testcaseNodes = testsuite.getElementsByTagName('testcase');
+     for (let i = 0; i < testcaseNodes.length; i++) {
+       const testcase = testcaseNodes[i];
+       const className = testcase.getAttribute('classname') || '';
+       const name = testcase.getAttribute('name') || 'Nieznany test';
+       const tcTime = parseFloat(testcase.getAttribute('time') || '0'); // Zmieniono nazwę zmiennej, by nie kolidowała z 'time' z testsuite
+
+       const failureNodes = testcase.getElementsByTagName('failure');
+       const hasFailure = failureNodes.length > 0;
+       let failureMessage = '';
+       let failureType = '';
+       let failureContent = '';
+
+       if (hasFailure) {
+         const failure = failureNodes[0];
+         failureMessage = failure.getAttribute('message') || '';
+         failureType = failure.getAttribute('type') || '';
+         failureContent = failure.textContent || '';
+       }
+
+       const systemOutNodes = testcase.getElementsByTagName('system-out');
+       let systemOut = '';
+       if (systemOutNodes.length > 0) {
+         systemOut = systemOutNodes[0].textContent || '';
+       }
+
+       testcases.push({
+         className,
+         name,
+         time: tcTime, // Używamy zmienionej nazwy
+         hasFailure,
+         failureMessage,
+         failureType,
+         failureContent,
+         systemOut
+       });
+     }
+
+    // Generuj HTML - przekazujemy ścieżki do JS
+    const html = generateHtml(suiteName, totalTests, failures, errors, skipped, timestamp, time, properties, testcases, xmlContent, chartJsPath, reportJsPath);
+
+    // Zapisz HTML do pliku z jawnym kodowaniem UTF-8
+    fs.writeFileSync(outputHtmlPath, html, 'utf-8'); // <--- Jawnie ustawione kodowanie
+    console.log(`Raport HTML został zapisany do pliku: ${outputHtmlPath}`);
+
   } catch (error) {
-    console.error('Błąd podczas generowania raportów:', error);
-    process.exit(1);
+    console.error('Wystąpił błąd podczas konwersji:', error);
+    // Dodaj więcej szczegółów błędu, jeśli dostępne
+    if (error.message) console.error("Message:", error.message);
+    if (error.stack) console.error("Stack:", error.stack);
+    process.exit(1); // Zakończ z kodem błędu
   }
 }
 
+/**
+ * Generuje kod HTML raportu
+ * @param {string} suiteName - Nazwa testsuite
+ * @param {number} totalTests - Liczba testów
+ * @param {number} failures - Liczba niepowodzeń
+ * @param {number} errors - Liczba błędów
+ * @param {number} skipped - Liczba pominiętych testów
+ * @param {string} timestamp - Znacznik czasu
+ * @param {number} time - Czas wykonania
+ * @param {Object} properties - Właściwości
+ * @param {Array} testcases - Testcases
+ * @param {string} xmlContent - Zawartość pliku XML
+ * @param {string} chartJsPath - Względna ścieżka do Chart.js
+ * @param {string} reportJsPath - Względna ścieżka do report.js
+ * @returns {string} - Kod HTML
+ */
+function generateHtml(suiteName, totalTests, failures, errors, skipped, timestamp, time, properties, testcases, xmlContent, chartJsPath, reportJsPath) {
+  const passed = totalTests - failures - errors - skipped;
+  const successRate = totalTests > 0 ? (passed / totalTests * 100).toFixed(2) : '0.00';
+
+  const passFailData = [
+    { label: 'Udane', value: passed, color: '#4CAF50' },
+    { label: 'Nieudane', value: failures, color: '#F44336' },
+    { label: 'Błędy', value: errors, color: '#FF9800' },
+    { label: 'Pominięte', value: skipped, color: '#9E9E9E' }
+  ].filter(item => item.value > 0); // Opcjonalnie: pokaż tylko niezerowe wartości na wykresie kołowym
+
+  const responseTimeData = testcases
+    .filter(tc => !tc.className.includes('Summary') && !tc.className.includes('Global')) // Filtruj podsumowania i globalne
+    .map(tc => ({
+      name: tc.name,
+      time: tc.time * 1000, // Konwersja na ms
+      color: tc.hasFailure ? '#F44336' : '#4CAF50'
+    }))
+    .sort((a, b) => b.time - a.time)
+    .slice(0, 15); // Pokaż Top 15 zamiast Top 10 (lub inną wartość)
+
+  const globalTestCase = testcases.find(tc => tc.className.includes('Global'));
+
+  let percentileData = [];
+  if (globalTestCase && globalTestCase.systemOut) {
+    try {
+      const percentileRegex = /(\d{1,3}(?:st|nd|rd|th) percentile).*?:\s*?(\d+)/gi; // Ulepszony regex
+      let match;
+      while ((match = percentileRegex.exec(globalTestCase.systemOut)) !== null) {
+        // Wyciągnij tylko liczbę percentyla
+        const percentileValue = parseInt(match[1].match(/\d+/)[0], 10);
+        if (!isNaN(percentileValue)) {
+             percentileData.push({
+                 percentile: percentileValue.toString(), // Zapisz jako string dla spójności
+                 value: parseInt(match[2], 10)
+             });
+        }
+      }
+      percentileData.sort((a, b) => parseInt(a.percentile, 10) - parseInt(b.percentile, 10));
+    } catch (e) {
+       console.error("Błąd podczas parsowania percentyli:", e);
+       percentileData = []; // Resetuj w razie błędu
+    }
+  }
+
+  // Przygotuj obiekt z danymi do wstrzyknięcia do HTML
+  const reportDataForJs = {
+     passFailData: passFailData,
+     responseTimeData: responseTimeData,
+     percentileData: percentileData
+  };
+
+  // Zabezpieczenie przed XSS przy wyświetlaniu nazw itp. w HTML
+  const escapeHtml = (unsafe) => {
+      if (typeof unsafe !== 'string') return unsafe;
+      return unsafe
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/"/g, "&quot;")
+          .replace(/'/g, "&#039;");
+  };
+
+  // Generuj HTML
+  return `<!DOCTYPE html>
+<html lang="pl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Raport testów wydajnościowych - <span class="math-inline">\{escapeHtml\(suiteName\)\}</title\>
+<style\>
+/\* \.\.\. \(CAŁY twój CSS bez zmian\) \.\.\. \*/
+\:root \{
+\-\-primary\-color\: \#2196F3;
+\-\-success\-color\: \#4CAF50;
+\-\-warning\-color\: \#FF9800;
+\-\-error\-color\: \#F44336;
+\-\-text\-color\: \#333;
+\-\-background\-color\: \#f5f5f5;
+\-\-card\-background\: \#fff;
+\-\-border\-color\: \#ddd;
+\}
+body \{
+font\-family\: 'Segoe UI', Tahoma, Geneva, Verdana, sans\-serif;
+line\-height\: 1\.6;
+color\: var\(\-\-text\-color\);
+background\-color\: var\(\-\-background\-color\);
+margin\: 0;
+padding\: 20px;
+\}
+\.container \{
+max\-width\: 1200px;
+margin\: 0 auto;
+\}
+header \{
+text\-align\: center;
+margin\-bottom\: 30px;
+\}
+h1, h2, h3 \{
+color\: var\(\-\-primary\-color\);
+\}
+\.card \{
+background\-color\: var\(\-\-card\-background\);
+border\-radius\: 8px;
+box\-shadow\: 0 2px 4px rgba\(0,0,0,0\.1\);
+margin\-bottom\: 20px;
+padding\: 20px;
+overflow\: hidden; /\* Dodane dla pewności \*/
+\}
+\.summary \{
+display\: flex;
+flex\-wrap\: wrap;
+gap\: 20px;
+margin\-bottom\: 30px;
+\}
+\.summary\-item \{
+flex\: 1;
+min\-width\: 180px; /\* Zmniejszone dla lepszego dopasowania \*/
+padding\: 15px;
+border\-radius\: 8px;
+text\-align\: center;
+box\-shadow\: 0 1px 3px rgba\(0,0,0,0\.08\); /\* Subtelniejszy cień \*/
+\}
+\.summary\-item h3 \{
+margin\-top\: 0;
+margin\-bottom\: 10px;
+font\-size\: 1em;
+color\: white; /\* Poprawka koloru dla nagłówków \*/
+\}
+\.summary\-item p \{
+margin\-bottom\: 0;
+font\-size\: 1\.5em;
+font\-weight\: bold;
+color\: white; /\* Poprawka koloru dla wartości \*/
+\}
+\.summary\-item\.success \{
+background\-color\: var\(\-\-success\-color\);
+\}
+\.summary\-item\.error \{
+background\-color\: var\(\-\-error\-color\);
+\}
+\.summary\-item\.warning \{
+background\-color\: var\(\-\-warning\-color\);
+\}
+\.summary\-item\.info \{
+background\-color\: var\(\-\-primary\-color\);
+\}
+\.properties\-table \{
+width\: 100%;
+border\-collapse\: collapse;
+margin\-bottom\: 20px;
+\}
+\.properties\-table th, \.properties\-table td \{
+padding\: 10px 12px; /\* Zmniejszony padding \*/
+border\: 1px solid var\(\-\-border\-color\); /\* Dodano wszystkie krawędzie \*/
+text\-align\: left;
+word\-break\: break\-word; /\* Zapobiega rozpychaniu przez długie wartości \*/
+\}
+\.properties\-table th \{
+background\-color\: \#e9ecef; /\* Jaśniejsze tło nagłówka \*/
+color\: var\(\-\-text\-color\);
+font\-weight\: 600; /\* Pogrubienie \*/
+\}
+\.properties\-table tr\:nth\-child\(even\) \{
+background\-color\: rgba\(0,0,0,0\.02\);
+\}
+\.properties\-table td\:first\-child \{
+font\-weight\: 500; /\* Lekkie pogrubienie nazw właściwości \*/
+width\: 30%; /\* Ustalenie szerokości pierwszej kolumny \*/
+\}
+\.chart\-container \{
+display\: flex;
+flex\-wrap\: wrap;
+gap\: 20px;
+margin\-bottom\: 30px;
+\}
+\.chart \{
+flex\: 1 1 400px; /\* Pozwól na zmniejszanie, bazowa szerokość 400px \*/
+min\-width\: 300px;
+height\: 350px; /\* Zwiększona wysokość \*/
+background\-color\: var\(\-\-card\-background\);
+border\-radius\: 8px;
+box\-shadow\: 0 2px 4px rgba\(0,0,0,0\.1\);
+padding\: 20px;
+position\: relative; /\* Potrzebne dla Chart\.js do responsywności \*/
+\}
+\.chart h3 \{
+text\-align\: center;
+margin\-top\: 0;
+margin\-bottom\: 15px;
+\}
+\.testcases \{
+/\* Kontener dla testcase'ów \*/
+\}
+\.testcase \{
+margin\-bottom\: 10px;
+padding\: 0; /\* Usunięto padding, będzie w header i details \*/
+border\-radius\: 8px;
+background\-color\: var\(\-\-card\-background\);
+box\-shadow\: 0 1px 3px rgba\(0,0,0,0\.08\);
+overflow\: hidden; /\* Zapobiega wychodzeniu zawartości \*/
+\}
+\.testcase\-header \{
+display\: flex;
+justify\-content\: space\-between;
+align\-items\: center;
+cursor\: pointer;
+padding\: 12px 15px; /\* Dodano padding tutaj \*/
+background\-color\: \#f8f9fa; /\* Lekkie tło dla nagłówka \*/
+border\-bottom\: 1px solid var\(\-\-border\-color\);
+\}
+\.testcase\.expanded \.testcase\-header \{
+border\-bottom\-color\: transparent; /\* Usuń dolną krawędź po rozwinięciu \*/
+\}
+\.testcase\-name \{
+font\-weight\: bold;
+flex\-grow\: 1;
+margin\-right\: 10px; /\* Odstęp od czasu \*/
+word\-break\: break\-all; /\* Łam długie nazwy testów \*/
+\}
+\.testcase\-time \{
+margin\-left\: 10px;
+font\-size\: 0\.9em;
+color\: \#6c757d; /\* Szary kolor dla czasu \*/
+white\-space\: nowrap; /\* Zapobiegaj łamaniu czasu \*/
+\}
+\.testcase\-status \{
+padding\: 4px 8px; /\* Zmniejszony padding \*/
+border\-radius\: 4px;
+margin\-left\: 10px;
+font\-size\: 0\.85em; /\* Mniejsza czcionka statusu \*/
+white\-space\: nowrap; /\* Zapobiegaj łamaniu statusu \*/
+\}
+\.testcase\-status\.success \{
+background\-color\: var\(\-\-success\-color\);
+color\: white;
+\}
+\.testcase\-status\.failure \{
+background\-color\: var\(\-\-error\-color\);
+color\: white;
+\}
+\.testcase\-details \{
+margin\-top\: 0; /\* Usunięto margines \*/
+padding\: 15px;
+background\-color\: \#fff; /\* Tło detali \*/
+border\-top\: 1px solid var\(\-\-border\-color\); /\* Linia oddzielająca od nagłówka \*/
+display\: none; /\* Ukryte domyślnie \*/
+\}
+\.testcase\-details pre \{
+background\-color\: \#e9ecef; /\* Tło dla bloków pre \*/
+padding\: 10px;
+border\-radius\: 4px;
+white\-space\: pre\-wrap;
+word\-wrap\: break\-word;
+font\-family\: Consolas, Monaco, 'Andale Mono', 'Ubuntu Mono', monospace;
+font\-size\: 0\.9em;
+max\-height\: 300px; /\* Ograniczenie wysokości \*/
+overflow\-y\: auto; /\* Scroll dla długiej zawartości \*/
+margin\-top\: 5px;
+margin\-bottom\: 10px;
+\}
+\.testcase\-details p \{
+margin\-top\: 5px;
+margin\-bottom\: 5px;
+\}
+\.testcase\-details strong \{
+color\: var\(\-\-primary\-color\);
+\}
+\.testcase\.expanded \.testcase\-details \{
+display\: block;
+\}
+\.toggle\-button \{
+background\: none;
+border\: 1px solid var\(\-\-border\-color\);
+border\-radius\: 50%; /\* Okrągły przycisk \*/
+cursor\: pointer;
+font\-size\: 1em; /\* Rozmiar czcionki \*/
+color\: var\(\-\-primary\-color\);
+width\: 24px; /\* Stała szerokość \*/
+height\: 24px; /\* Stała wysokość \*/
+line\-height\: 20px; /\* Wyśrodkowanie pionowe \+/\- \*/
+text\-align\: center;
+padding\: 0;
+margin\-left\: 10px;
+transition\: transform 0\.2s ease\-in\-out; /\* Animacja obrotu \*/
+\}
+\.testcase\.expanded \.toggle\-button \{
+transform\: rotate\(45deg\); /\* Obróć przycisk '\-' w '\+' \*/
+\}
+\.search\-container \{
+margin\-bottom\: 20px;
+\}
+\#searchInput \{
+width\: 100%;
+padding\: 10px 15px;
+border\: 1px solid var\(\-\-border\-color\);
+border\-radius\: 4px;
+font\-size\: 16px;
+box\-sizing\: border\-box; /\* Uwzględnij padding w szerokości \*/
+\}
+\.tabs \{
+display\: flex;
+margin\-bottom\: 0; /\* Usunięto margines dolny \*/
+border\-bottom\: 1px solid var\(\-\-border\-color\);
+background\-color\: \#e9ecef; /\* Tło dla paska zakładek \*/
+border\-radius\: 4px 4px 0 0; /\* Zaokrąglenie górnych rogów \*/
+padding\-left\: 10px; /\* Mały odstęp od lewej \*/
+\}
+\.tab \{
+padding\: 12px 20px; /\* Zwiększony padding \*/
+cursor\: pointer;
+border\: none; /\* Usunięto krawędzie \*/
+border\-bottom\: 3px solid transparent; /\* Krawędź dolna do podświetlania \*/
+margin\-right\: 5px;
+color\: \#495057; /\* Ciemniejszy kolor nieaktywnej zakładki \*/
+font\-weight\: 500; /\* Lekkie pogrubienie \*/
+transition\: all 0\.2s ease; /\* Płynne przejście \*/
+\}
+\.tab\:hover \{
+color\: var\(\-\-primary\-color\);
+border\-bottom\-color\: rgba\(33, 150, 243, 0\.5\); /\* Podświetlenie przy najechaniu \*/
+\}
+\.tab\.active \{
+color\: var\(\-\-primary\-color\); /\* Kolor aktywnej zakładki \*/
+border\-bottom\-color\: var\(\-\-primary\-color\); /\* Wyraźne podświetlenie aktywnej \*/
+background\-color\: transparent; /\* Usunięto tło dla aktywnej \*/
+\}
+\.tab\-content \{
+display\: none;
+padding\-top\: 20px; /\* Dodano odstęp między zakładkami a treścią \*/
+\}
+\.tab\-content\.active \{
+display\: block;
+\}
+pre\[style\*\="overflow\-x\: auto;"\] \{
+max\-height\: 500px;
+background\-color\: \#282c34; /\* Ciemne tło dla XML \*/
+color\: \#abb2bf; /\* Jasny tekst dla XML \*/
+padding\: 15px;
+border\-radius\: 4px;
+border\: 1px solid var\(\-\-border\-color\);
+\}
+@media \(max\-width\: 768px\) \{
+\.summary \{
+/\* Na mniejszych ekranach summary\-item zajmują całą szerokość \*/
+\}
+\.chart\-container \{
+flex\-direction\: column; /\* Wykresy jeden pod drugim \*/
+\}
+\.chart \{
+flex\-basis\: auto; /\* Resetuj bazową szerokość \*/
+height\: 300px; /\* Mniejsza wysokość na mobilnych \*/
+\}
+\.testcase\-header \{
+flex\-wrap\: wrap; /\* Pozwól zawijać elementy nagłówka \*/
+\}
+\.testcase\-name \{
+flex\-basis\: 100%; /\* Nazwa zajmuje całą linię \*/
+margin\-bottom\: 5px; /\* Odstęp pod nazwą \*/
+\}
+\.testcase\-time, \.testcase\-status, \.toggle\-button \{
+margin\-left\: 0; /\* Resetuj marginesy \*/
+margin\-right\: 10px; /\* Dodaj odstęp między elementami w linii \*/
+\}
+\}
+</style\>
+</head\>
+<body\>
+<div class\="container"\>
+<header\>
+<h1\>Raport testów wydajnościowych</h1\>
+<h2\></span>{escapeHtml(suiteName)}</h2>
+   <p>Data: <span class="math-inline">\{new Date\(timestamp\)\.toLocaleString\('pl\-PL'\)\}</p\> </header\>
+<div class\="tabs"\>
+<div class\="tab active" data\-tab\="summary"\>Podsumowanie</div\>
+<div class\="tab" data\-tab\="details"\>Szczegóły testów</div\>
+<div class\="tab" data\-tab\="charts"\>Wykresy</div\>
+<div class\="tab" data\-tab\="raw"\>Surowe dane XML</div\>
+</div\>
+<div id\="summary" class\="tab\-content active"\>
+<div class\="card"\>
+<h3\>Podsumowanie testów</h3\>
+<div class\="summary"\>
+<div class\="summary\-item info"\>
+<h3\>Wszystkie</h3\>
+<p\></span>{totalTests}</p>
+       </div>
+       <div class="summary-item success">
+         <h3>Udane</h3>
+         <p><span class="math-inline">\{passed\}</p\>
+</div\>
+<div class\="summary\-item error"\>
+<h3\>Nieudane</h3\>
+<p\></span>{failures}</p>
+       </div>
+       ${errors > 0 ? `<div class="summary-item warning"><h3>Błędy</h3><p>${errors}</p></div>` : ''}
+        ${skipped > 0 ? `<div class="summary-item" style="background-color: #9E9E9E;"><h3>Pominięte</h3><p>${skipped}</p></div>` : ''}
+       <div class="summary-item warning">
+         <h3>Sukces (%)</h3>
+         <p><span class="math-inline">\{successRate\}%</p\>
+</div\>
+<div class\="summary\-item info"\>
+<h3\>Czas \(s\)</h3\>
+<p\></span>{time.toFixed(2)}</p>
+       </div>
+     </div>
+   </div>
+
+   <div class="card">
+     <h3>Właściwości testu</h3>
+     ${Object.keys(properties).length > 0 ? `
+     <table class="properties-table">
+       <thead>
+         <tr>
+           <th>Właściwość</th>
+           <th>Wartość</th>
+         </tr>
+       </thead>
+       <tbody>
+         ${Object.entries(properties).map(([key, value]) => `
+           <tr>
+             <td><span class="math-inline">\{escapeHtml\(key\)\}</td\>
+<td\></span>{escapeHtml(value)}</td>
+           </tr>
+         `).join('')}
+       </tbody>
+     </table>
+     ` : '<p>Brak zdefiniowanych właściwości.</p>'}
+   </div>
+
+   ${globalTestCase ? `
+   <div class="card">
+     <h3>Globalne statystyki (system-out)</h3>
+     <pre>${escapeHtml(globalTestCase.systemOut.trim())}</pre>
+   </div>
+   ` : ''}
+ </div>
+
+ <div id="details" class="tab-content">
+   <div class="search-container card"> <input type="text" id="searchInput" placeholder="Filtruj testy po nazwie lub klasie...">
+   </div>
+
+   <div class="testcases">
+     ${testcases.map((testcase, index) => `
+       <div class="testcase" data-name="${escapeHtml(testcase.name)}" data-classname="${escapeHtml(testcase.className)}">
+         <div class="testcase-header" onclick="toggleTestCase(${index})">
+           <span class="testcase-name">${escapeHtml(testcase.name)}</span>
+           <span class="testcase-time">${(testcase.time * 1000).toFixed(0)} ms</span>
+           <span class="testcase-status ${testcase.hasFailure ? 'failure' : 'success'}">${testcase.hasFailure ? 'Błąd' : 'OK'}</span>
+           <button class="toggle-button" id="toggle-${index}" aria-expanded="false" aria-controls="details-${index}">+</button>
+         </div>
+         <div class="testcase-details" id="details-${index}">
+           <p><strong>Klasa:</strong> ${escapeHtml(testcase.className)}</p>
+           <p><strong>Czas:</strong> ${(testcase.time * 1000).toFixed(2)} ms</p>
+           ${testcase.hasFailure ? `
+             <p><strong>Status:</strong> <span style="color: var(--error-color); font-weight: bold;">Nieudany</span></p>
+             <p><strong>Komunikat:</strong> ${escapeHtml(testcase.failureMessage)}</p>
+             <p><strong>Typ błędu:</strong> ${escapeHtml(testcase.failureType)}</p>
+             ${testcase.failureContent ? `<p><strong>Szczegóły błędu:</strong></p><pre>${escapeHtml(testcase.failureContent.trim())}</pre>` : ''}
+           ` : '<p><strong>Status:</strong> <span style="color: var(--success-color); font-weight: bold;">Udany</span></p>'}
+           ${testcase.systemOut ? `<p><strong>Log (system-out):</strong></p><pre>${escapeHtml(testcase.systemOut.trim())}</pre>` : ''}
+         </div>
+       </div>
+     `).join('')}
+   </div>
+ </div>
+
+ <div id="charts" class="tab-content">
+   <div class="chart-container">
+     <div class="chart">
+       <h3>Status testów</h3>
+       <canvas id="statusChart"></canvas>
+     </div>
+
+     <div class="chart">
+       <h3>Czasy odpowiedzi (Top ${responseTimeData.length}, ms)</h3>
+       <canvas id="responseTimeChart"></canvas>
+     </div>
+   </div>
+
+   ${percentileData.length > 0 ? `
+   <div class="chart-container">
+     <div class="chart" style="flex-basis: 100%; height: 400px;"> <h3>Percentyle czasów odpowiedzi (ms)</h3>
+       <canvas id="percentileChart"></canvas>
+     </div>
+   </div>
+   ` : ''}
+    ${percentileData.length === 0 && globalTestCase ? `
+      <div class="card"><p>Brak danych percentyli do wyświetlenia na wykresie (sprawdź format w Global/system-out).</p></div>
+    ` : ''}
+ </div>
+
+ <div id="raw" class="tab-content">
+   <div class="card">
+     <h3>Surowe dane XML</h3>
+     <pre style="overflow-x: auto;">${escapeHtml(xmlContent)}</pre>
+   </div>
+ </div>
+</div>
+
+<script>
+ // Przekazanie danych z Node.js do globalnego obiektu w przeglądarce
+ window.reportData = <span class="math-inline">\{JSON\.stringify\(reportDataForJs\)\};
+</script\>
+<script src\="</span>{escapeHtml(chartJsPath)}"></script>
+<script src="${escapeHtml(reportJsPath)}"></script>
+
+</body>
+</html>`;
+}
+
+
+/**
+ * Główna funkcja programu
+ */
+function main() {
+  const args = process.argv.slice(2);
+
+  if (args.length < 1) {
+    console.log("Użycie: node junit_to_html.mjs <plik_junit.xml> [plik_wyjściowy.html] [ścieżka_do_chart.js] [ścieżka_do_report.js]");
+    console.log("Przykład: node junit_to_html.mjs results.xml report.html js/chart.umd.min.js js/report.js");
+    process.exit(1);
+  }
+
+  const xmlFilePath = args[0];
+  const outputHtmlPath = args.length > 1 ? args[1] : xmlFilePath.replace(/\.xml$/, '.html');
+
+  // Opcjonalne ścieżki do JS - użyj domyślnych, jeśli nie podano
+  const chartJsRelativePath = args.length > 2 ? args[2] : 'chart.umd.min.js'; // Oczekiwana ścieżka względna w HTML
+  const reportJsRelativePath = args.length > 3 ? args[3] : 'report.js';       // Oczekiwana ścieżka względna w HTML
+
+  if (!fs.existsSync(xmlFilePath)) {
+    console.error(`Błąd: Plik ${xmlFilePath} nie istnieje.`);
+    process.exit(1);
+  }
+
+  // Tutaj musisz zapewnić, że pliki Chart.js i report.js znajdą się we właściwym miejscu
+  // względem generowanego HTML w artefakcie Azure Pipelines.
+  // Skrypt Node.js tylko generuje HTML z odpowiednimi ścieżkami <script src="...">.
+  // Kopiowanie plików JS do artefaktu musi być zrobione w pipeline YAML.
+
+  // Przykład: Sprawdzenie, czy plik Chart.js istnieje w oczekiwanej lokalizacji źródłowej
+  // (ścieżka może wymagać dostosowania do struktury twojego projektu)
+  const chartJsSourcePath = path.resolve('node_modules/chart.js/dist/chart.umd.min.js');
+  if (!fs.existsSync(chartJsSourcePath)) {
+     console.warn(`OSTRZEŻENIE: Nie znaleziono pliku Chart.js w ${chartJsSourcePath}. Upewnij się, że jest zainstalowany ('npm install') i zostanie skopiowany do artefaktu obok <span class="math-inline">\{outputHtmlPath\} jako '</span>{chartJsRelativePath}'.`);
+  }
+  // Podobnie można sprawdzić istnienie report.js, jeśli jest w repozytorium.
+
+  convertJUnitXmlToHtml(xmlFilePath, outputHtmlPath, chartJsRelativePath, reportJsRelativePath);
+}
+
+// Uruchomienie programu
 main();
