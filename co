@@ -1,123 +1,633 @@
-import { execSync } from 'child_process';
-// Dodajemy renameSync
-import { existsSync, readdirSync, statSync, copyFileSync, mkdirSync, renameSync } from 'fs';
-import path, { join, dirname, resolve as pathResolve } from 'path';
-import { fileURLToPath } from 'url';
+import fs from 'fs';
+import path from 'path'; // Import path jest nadal przydatny np. do normalizacji ścieżek
+import { DOMParser } from 'xmldom';
 
-async function main() {
-    // Ścieżka do katalogu z wynikami Gatling
-    const GATLING_DIR = 'target/gatling';
-    const resolvedTargetDirectory = pathResolve(GATLING_DIR); // Absolutna ścieżka docelowa
+/**
+ * Konwertuje plik JUnit XML na raport HTML (bez JavaScript)
+ * @param {string} xmlFilePath - Ścieżka do pliku XML
+ * @param {string} outputHtmlPath - Ścieżka do pliku wyjściowego HTML
+ */
+function convertJUnitXmlToHtml(xmlFilePath, outputHtmlPath) { // Usunięto argumenty ścieżek JS
+  try {
+    const xmlContent = fs.readFileSync(xmlFilePath, 'utf-8');
+    const parser = new DOMParser();
+    const xmlDoc = parser.parseFromString(xmlContent, 'text/xml');
 
-    // Ustalenie ścieżki do bieżącego katalogu skryptu
-    const __filename = fileURLToPath(import.meta.url);
-    const __dirname = dirname(__filename);
+    const testsuites = xmlDoc.getElementsByTagName('testsuites')[0]; // Może być użyte później do obsługi wielu suites
+    const testsuite = xmlDoc.getElementsByTagName('testsuite')[0];
 
-    // Nazwy bazowe plików wynikowych
-    const XML_BASE_NAME = 'TEST-gatling-results.xml';
-    const HTML_BASE_NAME = 'gatling-report.html';
-
-    // Ścieżki do plików w katalogu BIEŻĄCYM (tam, gdzie zapisują pod-skrypty)
-    const xmlSourcePath = pathResolve(XML_BASE_NAME);
-    const htmlSourcePath = pathResolve(HTML_BASE_NAME);
-
-    // Ścieżki do plików w katalogu DOCELOWYM (target/gatling)
-    const xmlDestPath = path.join(resolvedTargetDirectory, XML_BASE_NAME);
-    const htmlDestPath = path.join(resolvedTargetDirectory, HTML_BASE_NAME);
-
-
-    console.log(`Katalog roboczy skryptu: ${process.cwd()}`);
-    console.log(`Katalog skryptu: ${__dirname}`);
-    console.log(`Docelowy katalog raportów: ${resolvedTargetDirectory}`);
-
-    try {
-        // --- Kopiowanie zasobów JS do katalogu docelowego ---
-        console.log(`\nSprawdzanie i kopiowanie zasobów JS do: ${resolvedTargetDirectory}`);
-        const reportJsSourcePath = path.join(__dirname, 'report.js');
-        const chartJsSourcePath = pathResolve('node_modules/chart.js/dist/chart.umd.js');
-        const reportJsDestPath = path.join(resolvedTargetDirectory, 'report.js');
-        const chartJsDestPath = path.join(resolvedTargetDirectory, 'chart.umd.js');
-
-        if (!existsSync(reportJsSourcePath)) throw new Error(`Brak pliku report.js w: ${reportJsSourcePath}`);
-        if (!existsSync(chartJsSourcePath)) throw new Error(`Brak pliku chart.umd.js w: ${chartJsSourcePath}. Uruchom 'npm install'.`);
-
-        console.log(`Tworzenie katalogu docelowego (jeśli potrzebne): ${resolvedTargetDirectory}`);
-        mkdirSync(resolvedTargetDirectory, { recursive: true });
-
-        console.log(`Kopiowanie ${reportJsSourcePath} -> ${reportJsDestPath}`);
-        copyFileSync(reportJsSourcePath, reportJsDestPath);
-        console.log(`Kopiowanie ${chartJsSourcePath} -> ${chartJsDestPath}`);
-        copyFileSync(chartJsSourcePath, chartJsDestPath);
-        console.log('Pomyślnie skopiowano zasoby JS.');
-        // --- Koniec kopiowania zasobów JS ---
-
-
-        // --- Wyszukiwanie najnowszych wyników Gatling ---
-        if (!existsSync(GATLING_DIR)) throw new Error(`Katalog ${GATLING_DIR} nie istnieje mimo próby utworzenia.`);
-        function findLatestDir(baseDir) { /* ... (bez zmian) ... */
-            const dirs = readdirSync(baseDir, { withFileTypes: true })
-              .filter(dirent => dirent.isDirectory() && dirent.name.startsWith('jssimulation-'))
-              .map(dirent => ({ name: dirent.name, path: join(baseDir, dirent.name), time: statSync(join(baseDir, dirent.name)).mtime.getTime() }))
-              .sort((a, b) => b.time - a.time);
-            return dirs.length > 0 ? dirs[0].path : null;
-        }
-        const LATEST_DIR = findLatestDir(GATLING_DIR);
-        if (!LATEST_DIR) throw new Error(`Nie znaleziono katalogów jssimulation-* w ${GATLING_DIR}.`);
-        console.log(`\nZnaleziono najnowszy katalog symulacji: ${LATEST_DIR}`);
-        const STATS_FILE = join(LATEST_DIR, 'js', 'stats.js');
-        if (!existsSync(STATS_FILE)) throw new Error(`Nie znaleziono pliku ${STATS_FILE}.`);
-        console.log(`Znaleziono plik stats.js: ${STATS_FILE}`);
-        // --- Koniec wyszukiwania wyników ---
-
-
-        // --- Generowanie raportu XML (zapis do katalogu bieżącego) ---
-        console.log(`\nGenerowanie raportu XML (do katalogu bieżącego: ${xmlSourcePath})`);
-        // Wywołujemy raport.mjs bez podawania ścieżki wyjściowej (lub podając bazową nazwę)
-        execSync(`node raport.mjs "${pathResolve(STATS_FILE)}" "${XML_BASE_NAME}"`, { stdio: 'inherit' });
-
-        // Sprawdzenie, czy plik XML został utworzony w katalogu bieżącym
-        if (!existsSync(xmlSourcePath)) throw new Error(`Nie udało się wygenerować pliku XML w: ${xmlSourcePath}.`);
-        console.log(`Raport XML został wygenerowany: ${xmlSourcePath}`);
-
-        // --- Przenoszenie pliku XML ---
-        console.log(`Przenoszenie ${xmlSourcePath} -> ${xmlDestPath}`);
-        renameSync(xmlSourcePath, xmlDestPath);
-        if (!existsSync(xmlDestPath)) throw new Error(`Nie udało się przenieść pliku XML do: ${xmlDestPath}.`);
-        console.log(`Plik XML przeniesiony do katalogu docelowego.`);
-        // --- Koniec przenoszenia XML ---
-
-
-        // --- Generowanie raportu HTML (zapis do katalogu bieżącego) ---
-        // Ścieżki do JS używane wewnątrz HTML - proste nazwy, bo finalnie HTML i JS będą razem
-        const chartJsHtmlPath = 'chart.umd.js';
-        const reportJsHtmlPath = 'report.js';
-
-        console.log(`\nGenerowanie raportu HTML (do katalogu bieżącego: ${htmlSourcePath})`);
-        // Wywołujemy tohtml.mjs podając ścieżkę do XML (już w target/gatling!)
-        // oraz nazwę pliku HTML do utworzenia w katalogu bieżącym.
-        // Przekazujemy też proste nazwy JS jako arg 3 i 4.
-        execSync(`node tohtml.mjs "${xmlDestPath}" "${HTML_BASE_NAME}" "${chartJsHtmlPath}" "${reportJsHtmlPath}"`, { stdio: 'inherit' });
-
-        // Sprawdzenie, czy plik HTML został utworzony w katalogu bieżącym
-        if (!existsSync(htmlSourcePath)) throw new Error(`Nie udało się wygenerować pliku HTML w: ${htmlSourcePath}.`);
-        console.log(`Raport HTML został wygenerowany: ${htmlSourcePath}`);
-
-        // --- Przenoszenie pliku HTML ---
-        console.log(`Przenoszenie ${htmlSourcePath} -> ${htmlDestPath}`);
-        renameSync(htmlSourcePath, htmlDestPath);
-        if (!existsSync(htmlDestPath)) throw new Error(`Nie udało się przenieść pliku HTML do: ${htmlDestPath}.`);
-        console.log(`Plik HTML przeniesiony do katalogu docelowego.`);
-        // --- Koniec przenoszenia HTML ---
-
-        console.log(`\nProces zakończony pomyślnie. Wyniki w katalogu: ${resolvedTargetDirectory}`);
-
-    } catch (error) {
-        console.error('\n!!! Wystąpił błąd podczas wykonywania skryptu głównego:', error.message);
-        if (error.stack) {
-            console.error(error.stack);
-        }
-        process.exit(1);
+    if (!testsuite) {
+      throw new Error('Nie znaleziono elementu testsuite w pliku XML');
     }
+
+    const suiteName = testsuite.getAttribute('name') || 'Nieznana symulacja';
+    const totalTests = parseInt(testsuite.getAttribute('tests') || '0', 10);
+    const failures = parseInt(testsuite.getAttribute('failures') || '0', 10);
+    const errors = parseInt(testsuite.getAttribute('errors') || '0', 10); // Błędy często traktuje się jak failure w JUnit
+    const skipped = parseInt(testsuite.getAttribute('skipped') || '0', 10);
+    const timestamp = testsuite.getAttribute('timestamp') || new Date().toISOString();
+    const time = parseFloat(testsuite.getAttribute('time') || '0');
+
+    const properties = {};
+    const propertyNodes = testsuite.getElementsByTagName('property');
+    for (let i = 0; i < propertyNodes.length; i++) {
+      const property = propertyNodes[i];
+      const name = property.getAttribute('name');
+      const value = property.getAttribute('value');
+      if (name && value) {
+        properties[name] = value;
+      }
+    }
+
+    const testcases = [];
+    const testcaseNodes = testsuite.getElementsByTagName('testcase');
+    for (let i = 0; i < testcaseNodes.length; i++) {
+      const testcase = testcaseNodes[i];
+      const className = testcase.getAttribute('classname') || '';
+      const name = testcase.getAttribute('name') || 'Nieznany test';
+      const tcTime = parseFloat(testcase.getAttribute('time') || '0');
+
+      const failureNodes = testcase.getElementsByTagName('failure');
+      const errorNodes = testcase.getElementsByTagName('error'); // Dodaj obsługę <error>
+      const hasFailure = failureNodes.length > 0 || errorNodes.length > 0;
+      let failureMessage = '';
+      let failureType = '';
+      let failureContent = '';
+
+      if (failureNodes.length > 0) {
+          const failure = failureNodes[0];
+          failureMessage = failure.getAttribute('message') || '';
+          failureType = failure.getAttribute('type') || 'Failure';
+          failureContent = failure.textContent || '';
+      } else if (errorNodes.length > 0) {
+          const error = errorNodes[0];
+          failureMessage = error.getAttribute('message') || '';
+          failureType = error.getAttribute('type') || 'Error';
+          failureContent = error.textContent || '';
+      }
+
+
+      const systemOutNodes = testcase.getElementsByTagName('system-out');
+      let systemOut = '';
+      if (systemOutNodes.length > 0) {
+        systemOut = systemOutNodes[0].textContent || '';
+      }
+
+       const systemErrNodes = testcase.getElementsByTagName('system-err'); // Dodaj obsługę <system-err>
+       let systemErr = '';
+       if (systemErrNodes.length > 0) {
+           systemErr = systemErrNodes[0].textContent || '';
+       }
+
+      testcases.push({
+        className,
+        name,
+        time: tcTime,
+        hasFailure,
+        failureMessage,
+        failureType,
+        failureContent,
+        systemOut,
+        systemErr // Dodano systemErr
+      });
+    }
+
+    // Generuj HTML - bez ścieżek do JS
+    const html = generateHtml(suiteName, totalTests, failures + errors, /* failures i errors razem */ skipped, timestamp, time, properties, testcases, xmlContent);
+
+    // Zapisz HTML do pliku z jawnym kodowaniem UTF-8
+    fs.writeFileSync(outputHtmlPath, html, 'utf-8');
+    console.log(`Raport HTML został zapisany do pliku: ${outputHtmlPath}`);
+
+  } catch (error) {
+    console.error('Wystąpił błąd podczas konwersji:', error);
+    if (error.message) console.error("Message:", error.message);
+    if (error.stack) console.error("Stack:", error.stack);
+    process.exit(1);
+  }
 }
 
+/**
+ * Generuje kod HTML raportu (bez JavaScript)
+ * @param {string} suiteName - Nazwa testsuite
+ * @param {number} totalTests - Liczba testów
+ * @param {number} failuresAndErrors - Liczba niepowodzeń i błędów
+ * @param {number} skipped - Liczba pominiętych testów
+ * @param {string} timestamp - Znacznik czasu
+ * @param {number} time - Czas wykonania
+ * @param {Object} properties - Właściwości
+ * @param {Array} testcases - Testcases
+ * @param {string} xmlContent - Zawartość pliku XML
+ * @returns {string} - Kod HTML
+ */
+function generateHtml(suiteName, totalTests, failuresAndErrors, skipped, timestamp, time, properties, testcases, xmlContent) {
+  const passed = totalTests - failuresAndErrors - skipped;
+  const successRate = totalTests > 0 ? (passed / totalTests * 100).toFixed(2) : '0.00';
+
+  // Przygotuj dane do wyświetlenia tekstowego (zamiast wykresów)
+  const statusData = [
+    { label: 'Udane', value: passed, style: 'color: var(--success-color);' },
+    { label: 'Nieudane/Błędy', value: failuresAndErrors, style: 'color: var(--error-color);' },
+    { label: 'Pominięte', value: skipped, style: 'color: #9E9E9E;' }
+  ];
+
+  const responseTimeData = testcases
+    .filter(tc => !tc.className.includes('Summary') && !tc.className.includes('Global'))
+    .map(tc => ({
+      name: tc.name,
+      time: tc.time * 1000, // Konwersja na ms
+      status: tc.hasFailure ? 'Błąd' : 'OK'
+    }))
+    .sort((a, b) => b.time - a.time)
+    .slice(0, 15); // Pokaż Top 15
+
+  const globalTestCase = testcases.find(tc => tc.className.includes('Global'));
+
+  let percentileData = [];
+   if (globalTestCase && globalTestCase.systemOut) {
+     try {
+       const percentileRegex = /(\d{1,3}(?:st|nd|rd|th) percentile).*?:\s*?(\d+)/gi;
+       let match;
+       while ((match = percentileRegex.exec(globalTestCase.systemOut)) !== null) {
+         const percentileValue = parseInt(match[1].match(/\d+/)[0], 10);
+         if (!isNaN(percentileValue)) {
+              percentileData.push({
+                   percentile: percentileValue.toString(),
+                   value: parseInt(match[2], 10)
+              });
+         }
+       }
+       percentileData.sort((a, b) => parseInt(a.percentile, 10) - parseInt(b.percentile, 10));
+     } catch (e) {
+        console.error("Błąd podczas parsowania percentyli:", e);
+        percentileData = []; // Resetuj w razie błędu
+     }
+   }
+
+  // Funkcja do bezpiecznego wstawiania HTML (zapobiega XSS)
+  const escapeHtml = (unsafe) => {
+    if (typeof unsafe !== 'string') return unsafe;
+    return unsafe
+         .replace(/&/g, "&amp;")
+         .replace(/</g, "&lt;")
+         .replace(/>/g, "&gt;")
+         .replace(/"/g, "&quot;")
+         .replace(/'/g, "&#039;");
+  };
+
+  // Generuj HTML
+  return `<!DOCTYPE html>
+<html lang="pl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Raport testów wydajnościowych - ${escapeHtml(suiteName)}</title>
+<style>
+  /* --- Podstawowe style --- */
+  :root {
+    --primary-color: #2196F3;
+    --success-color: #4CAF50;
+    --warning-color: #FF9800; /* Nadal może być użyte */
+    --error-color: #F44336;
+    --text-color: #333;
+    --background-color: #f5f5f5;
+    --card-background: #fff;
+    --border-color: #ddd;
+    --pre-background: #e9ecef;
+  }
+  body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    line-height: 1.6;
+    color: var(--text-color);
+    background-color: var(--background-color);
+    margin: 0;
+    padding: 20px;
+  }
+  .container {
+    max-width: 1200px;
+    margin: 0 auto;
+  }
+  header {
+    text-align: center;
+    margin-bottom: 30px;
+    padding-bottom: 15px;
+    border-bottom: 1px solid var(--border-color);
+  }
+  h1, h2, h3, h4 {
+    color: var(--primary-color);
+    margin-top: 1.5em;
+    margin-bottom: 0.5em;
+  }
+  h1 { font-size: 2em; }
+  h2 { font-size: 1.75em; border-bottom: 1px solid #eee; padding-bottom: 0.3em;}
+  h3 { font-size: 1.5em; }
+  h4 { font-size: 1.2em; color: #555; }
+
+  .card {
+    background-color: var(--card-background);
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    margin-bottom: 25px;
+    padding: 20px;
+    overflow: hidden;
+  }
+
+  /* --- Sekcja Podsumowanie --- */
+  .summary-grid { /* Zmieniono nazwę z .summary */
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); /* Bardziej elastyczny grid */
+    gap: 15px;
+    margin-bottom: 20px; /* Zmniejszony margines */
+  }
+  .summary-item {
+    padding: 15px;
+    border-radius: 8px;
+    text-align: center;
+    color: white; /* Domyślny kolor tekstu dla kart */
+    box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+  }
+  .summary-item h4 { /* Używamy h4 dla nagłówków w kartach */
+    margin-top: 0;
+    margin-bottom: 8px;
+    font-size: 0.9em; /* Mniejszy nagłówek */
+    font-weight: normal;
+    color: inherit; /* Dziedzicz kolor z rodzica (biały) */
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .summary-item p {
+    margin-bottom: 0;
+    font-size: 1.8em; /* Większa liczba */
+    font-weight: bold;
+    color: inherit;
+  }
+  .summary-item.success { background-color: var(--success-color); }
+  .summary-item.error { background-color: var(--error-color); }
+  .summary-item.skipped { background-color: #9E9E9E; } /* Szary dla pominiętych */
+  .summary-item.info { background-color: var(--primary-color); }
+  .summary-item.rate { background-color: var(--warning-color); } /* Pomarańczowy dla % sukcesu */
+
+  /* --- Tabela Właściwości i Danych Agregowanych --- */
+  .data-table { /* Zmieniono nazwę z .properties-table */
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 20px;
+  }
+  .data-table th, .data-table td {
+    padding: 10px 12px;
+    border: 1px solid var(--border-color);
+    text-align: left;
+    vertical-align: top; /* Lepsze wyrównanie przy długiej treści */
+    word-break: break-word;
+  }
+  .data-table th {
+    background-color: var(--pre-background);
+    color: var(--text-color);
+    font-weight: 600;
+  }
+  .data-table tr:nth-child(even) {
+    background-color: rgba(0,0,0,0.02);
+  }
+  .data-table td:first-child {
+    font-weight: 500;
+    width: 25%; /* Szerokość pierwszej kolumny */
+  }
+   .data-table .value-ok { color: var(--success-color); font-weight: bold; }
+   .data-table .value-error { color: var(--error-color); font-weight: bold; }
+   .data-table .value-skipped { color: #9E9E9E; }
+
+  /* --- Sekcja Szczegóły Testów --- */
+  .testcases-section { /* Kontener dla sekcji testów */
+     margin-top: 30px;
+  }
+  .testcase { /* Styl dla elementu <details> */
+    margin-bottom: 10px;
+    border-radius: 8px;
+    background-color: var(--card-background);
+    box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+    overflow: hidden;
+    border: 1px solid var(--border-color); /* Dodano lekką ramkę */
+  }
+  .testcase[open] summary { /* Styl dla <summary> gdy <details> jest otwarte */
+     border-bottom: 1px solid var(--border-color);
+     background-color: #f8f9fa; /* Lekkie tło dla otwartego nagłówka */
+  }
+  .testcase summary { /* Styl dla elementu <summary> */
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    cursor: pointer;
+    padding: 12px 15px;
+    background-color: #fff; /* Domyślne tło */
+    font-weight: bold;
+    outline: none; /* Usuń domyślny outline przy focusie */
+    transition: background-color 0.2s ease;
+  }
+   .testcase summary:hover {
+       background-color: #f8f9fa; /* Lekkie tło przy najechaniu */
+   }
+   /* Domyślna strzałka dla <details> */
+   .testcase summary::marker { /* Stylizacja domyślnej strzałki */
+      color: var(--primary-color);
+      font-size: 1.1em;
+   }
+   /* Można też użyć własnej ikony przez ::before lub ::after */
+
+  .testcase-summary-content { /* Kontener na zawartość w <summary> */
+      display: flex;
+      flex-grow: 1;
+      align-items: center;
+      margin-left: 8px; /* Odstęp od domyślnej strzałki */
+  }
+  .testcase-name {
+    flex-grow: 1;
+    margin-right: 15px;
+    word-break: break-all;
+  }
+  .testcase-time {
+    font-size: 0.9em;
+    color: #6c757d;
+    white-space: nowrap;
+    margin-left: 10px;
+    font-weight: normal; /* Czas nie pogrubiony */
+  }
+  .testcase-status {
+    padding: 4px 8px;
+    border-radius: 4px;
+    margin-left: 10px;
+    font-size: 0.85em;
+    white-space: nowrap;
+    font-weight: bold; /* Status pogrubiony */
+  }
+  .testcase-status.success { background-color: var(--success-color); color: white; }
+  .testcase-status.failure { background-color: var(--error-color); color: white; }
+
+  .testcase-details { /* Styl dla zawartości wewnątrz <details> */
+    padding: 15px;
+    background-color: #fff; /* Tło detali */
+    border-top: 1px solid var(--border-color); /* Linia oddzielająca */
+  }
+  .testcase-details pre {
+    background-color: var(--pre-background);
+    padding: 10px 15px; /* Zwiększony padding */
+    border-radius: 4px;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    font-family: Consolas, Monaco, 'Andale Mono', 'Ubuntu Mono', monospace;
+    font-size: 0.9em;
+    max-height: 400px; /* Zwiększono max-height */
+    overflow-y: auto;
+    margin-top: 5px;
+    margin-bottom: 15px; /* Większy odstęp na dole */
+    border: 1px solid #ccc; /* Dodano ramkę dla pre */
+  }
+  .testcase-details p {
+    margin-top: 5px;
+    margin-bottom: 8px; /* Zwiększony odstęp */
+    line-height: 1.5;
+  }
+  .testcase-details strong {
+    color: #333; /* Ciemniejszy kolor dla "strong" */
+    margin-right: 5px;
+  }
+  .testcase-details .detail-label { /* Etykieta dla szczegółów */
+     font-weight: bold;
+     color: var(--primary-color);
+     display: block; /* Etykieta w nowej linii */
+     margin-bottom: 3px;
+  }
+   .failure-details { /* Kontener dla szczegółów błędu */
+       border: 1px solid var(--error-color);
+       border-left-width: 5px;
+       padding: 10px;
+       margin-top: 10px;
+       background-color: #fff7f7;
+   }
+   .failure-details p { margin: 5px 0; }
+   .failure-details pre { background-color: #ffebeb; border-color: #fcc; }
+
+
+  /* --- Sekcja Surowy XML --- */
+  .raw-xml-container pre {
+    max-height: 600px; /* Większa wysokość dla XML */
+    background-color: #282c34; /* Ciemne tło */
+    color: #abb2bf; /* Jasny tekst */
+    padding: 15px;
+    border-radius: 4px;
+    border: 1px solid var(--border-color);
+    overflow: auto; /* Scrollbary w obu kierunkach */
+    white-space: pre; /* Zachowaj białe znaki, ale bez zawijania */
+  }
+
+  /* --- Media Queries --- */
+  @media (max-width: 768px) {
+    .summary-grid {
+       grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); /* Mniejsze karty na mobilnych */
+    }
+    .testcase summary {
+        flex-wrap: wrap; /* Pozwól zawijać elementy nagłówka */
+    }
+    .testcase-name {
+       flex-basis: 100%; /* Nazwa zajmuje całą szerokość */
+       margin-bottom: 8px; /* Odstęp pod nazwą */
+       margin-right: 0;
+    }
+    .testcase-time, .testcase-status {
+       margin-left: 0;
+       margin-right: 10px; /* Odstęp między czasem a statusem */
+       margin-top: 5px; /* Mały odstęp od góry */
+    }
+     .data-table td:first-child {
+       width: 35%; /* Więcej miejsca na nazwy na mobilnych */
+    }
+  }
+
+</style>
+</head>
+<body>
+<div class="container">
+  <header>
+    <h1>Raport testów wydajnościowych</h1>
+    <h2>${escapeHtml(suiteName)}</h2>
+    <p>Data generacji: ${new Date(timestamp).toLocaleString('pl-PL')}</p>
+  </header>
+
+  <section id="summary-section" class="card">
+    <h3>Podsumowanie wyników</h3>
+    <div class="summary-grid">
+      <div class="summary-item info">
+        <h4>Wszystkie testy</h4>
+        <p>${totalTests}</p>
+      </div>
+      <div class="summary-item success">
+        <h4>Udane</h4>
+        <p>${passed}</p>
+      </div>
+      <div class="summary-item error">
+        <h4>Nieudane / Błędy</h4>
+        <p>${failuresAndErrors}</p>
+      </div>
+      ${skipped > 0 ? `
+      <div class="summary-item skipped">
+        <h4>Pominięte</h4>
+        <p>${skipped}</p>
+      </div>` : ''}
+      <div class="summary-item rate">
+        <h4>Sukces (%)</h4>
+        <p>${successRate}%</p>
+      </div>
+      <div class="summary-item info">
+        <h4>Całkowity czas (s)</h4>
+        <p>${time.toFixed(3)}</p> {/* Dokładniejszy czas */}
+      </div>
+    </div>
+  </section>
+
+  ${Object.keys(properties).length > 0 ? `
+  <section id="properties-section" class="card">
+    <h3>Właściwości testu</h3>
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Właściwość</th>
+          <th>Wartość</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${Object.entries(properties).map(([key, value]) => `
+          <tr>
+            <td>${escapeHtml(key)}</td>
+            <td>${escapeHtml(value)}</td>
+          </tr>
+        `).join('')}
+      </tbody>
+    </table>
+  </section>
+  ` : ''}
+
+   ${globalTestCase ? `
+   <section id="global-stats-section" class="card">
+     <h3>Globalne statystyki (system-out)</h3>
+     <pre>${escapeHtml(globalTestCase.systemOut.trim())}</pre>
+     ${globalTestCase.systemErr ? `<h4>Globalne błędy (system-err)</h4><pre>${escapeHtml(globalTestCase.systemErr.trim())}</pre>`: ''}
+   </section>
+   ` : ''}
+
+   <section id="aggregated-data-section" class="card">
+       <h3>Dane Agregowane</h3>
+
+       <h4>Podział statusów testów</h4>
+       <table class="data-table">
+         <thead><tr><th>Status</th><th>Liczba</th></tr></thead>
+         <tbody>
+           ${statusData.map(item => `<tr><td><span style="${item.style}">${escapeHtml(item.label)}</span></td><td>${item.value}</td></tr>`).join('')}
+           <tr><td><strong>Suma</strong></td><td><strong>${totalTests}</strong></td></tr>
+         </tbody>
+       </table>
+
+       ${responseTimeData.length > 0 ? `
+       <h4>Najdłuższe czasy odpowiedzi (Top ${responseTimeData.length}, ms)</h4>
+       <table class="data-table">
+           <thead><tr><th>Nazwa testu</th><th>Czas (ms)</th><th>Status</th></tr></thead>
+           <tbody>
+             ${responseTimeData.map(item => `
+               <tr>
+                 <td>${escapeHtml(item.name)}</td>
+                 <td>${item.time.toFixed(0)}</td>
+                 <td class="${item.status === 'OK' ? 'value-ok' : 'value-error'}">${item.status}</td>
+                </tr>
+             `).join('')}
+           </tbody>
+       </table>` : '<p>Brak danych o czasach odpowiedzi dla poszczególnych testów (poza Global/Summary).</p>'}
+
+       ${percentileData.length > 0 ? `
+       <h4>Percentyle czasów odpowiedzi (ms)</h4>
+       <table class="data-table">
+           <thead><tr><th>Percentyl</th><th>Czas (ms)</th></tr></thead>
+           <tbody>
+             ${percentileData.map(item => `<tr><td>${escapeHtml(item.percentile)}th</td><td>${item.value}</td></tr>`).join('')}
+           </tbody>
+       </table>` : (globalTestCase ? '<p>Nie znaleziono danych o percentylach w formacie "NNth percentile: NNNN" w globalnym system-out.</p>' : '')}
+   </section>
+
+
+  <section id="details-section" class="testcases-section">
+    <h2>Szczegóły Testów</h2>
+    ${testcases.length === 0 ? '<div class="card"><p>Nie znaleziono przypadków testowych w pliku.</p></div>' : ''}
+    ${testcases.map((testcase) => `
+      <details class="testcase">
+        <summary class="testcase-header">
+          <div class="testcase-summary-content">
+              <span class="testcase-name">${escapeHtml(testcase.name)}</span>
+              <span class="testcase-time">${(testcase.time * 1000).toFixed(0)} ms</span>
+              <span class="testcase-status ${testcase.hasFailure ? 'failure' : 'success'}">${testcase.hasFailure ? 'Błąd' : 'OK'}</span>
+          </div>
+        </summary>
+        <div class="testcase-details">
+          <p><strong>Klasa:</strong> ${escapeHtml(testcase.className)}</p>
+          <p><strong>Czas wykonania:</strong> ${(testcase.time * 1000).toFixed(3)} ms</p>
+          <p><strong>Status:</strong> <span style="font-weight: bold; color: ${testcase.hasFailure ? 'var(--error-color)' : 'var(--success-color)'};">${testcase.hasFailure ? 'Nieudany/Błąd' : 'Udany'}</span></p>
+
+          ${testcase.hasFailure ? `
+            <div class="failure-details">
+              <span class="detail-label">Szczegóły błędu/niepowodzenia:</span>
+              <p><strong>Typ:</strong> ${escapeHtml(testcase.failureType)}</p>
+              ${testcase.failureMessage ? `<p><strong>Komunikat:</strong> ${escapeHtml(testcase.failureMessage)}</p>` : ''}
+              ${testcase.failureContent ? `<p><strong>Stos wywołań / Szczegóły:</strong></p><pre>${escapeHtml(testcase.failureContent.trim())}</pre>` : ''}
+            </div>
+          ` : ''}
+
+          ${testcase.systemOut ? `
+            <div>
+              <span class="detail-label">Log (system-out):</span>
+              <pre>${escapeHtml(testcase.systemOut.trim())}</pre>
+            </div>
+          ` : ''}
+           ${testcase.systemErr ? `
+            <div>
+              <span class="detail-label">Log błędów (system-err):</span>
+              <pre style="border-color: var(--warning-color); background-color: #fffbeb;">${escapeHtml(testcase.systemErr.trim())}</pre> {/* Lekko inne tło dla stderr */}
+            </div>
+          ` : ''}
+        </div>
+      </details>
+    `).join('')}
+  </section>
+
+  <section id="raw-xml-section" class="card raw-xml-container">
+    <h3>Surowe dane XML</h3>
+    <pre>${escapeHtml(xmlContent)}</pre>
+  </section>
+
+</div>
+</body>
+</html>`;
+}
+
+/**
+ * Główna funkcja programu
+ */
+function main() {
+  const args = process.argv.slice(2);
+
+  if (args.length < 1) {
+    console.log("Użycie: node junit_to_html_nojs.js <plik_junit.xml> [plik_wyjściowy.html]");
+    console.log("Przykład: node junit_to_html_nojs.js results.xml report.html");
+    process.exit(1);
+  }
+
+  const xmlFilePath = args[0];
+  // Jeśli podano drugi argument, użyj go jako ścieżki wyjściowej, w przeciwnym razie zamień .xml na .html
+  const outputHtmlPath = args.length > 1 ? args[1] : xmlFilePath.replace(/\.xml$/, '.html');
+
+  if (!fs.existsSync(xmlFilePath)) {
+    console.error(`Błąd: Plik ${xmlFilePath} nie istnieje.`);
+    process.exit(1);
+  }
+
+  // Wywołaj funkcję konwertującą bez ścieżek do JS
+  convertJUnitXmlToHtml(xmlFilePath, outputHtmlPath);
+}
+
+// Uruchomienie programu
 main();
