@@ -1,107 +1,123 @@
 import { execSync } from 'child_process';
-import { existsSync, readdirSync, statSync, copyFileSync, mkdirSync } from 'fs';
+// Dodajemy renameSync
+import { existsSync, readdirSync, statSync, copyFileSync, mkdirSync, renameSync } from 'fs';
 import path, { join, dirname, resolve as pathResolve } from 'path';
 import { fileURLToPath } from 'url';
 
 async function main() {
-  // Ścieżka do katalogu z wynikami Gatling
-  const GATLING_DIR = 'target/gatling';
-  const resolvedTargetDirectory = pathResolve(GATLING_DIR); // Absolutna ścieżka do katalogu docelowego
+    // Ścieżka do katalogu z wynikami Gatling
+    const GATLING_DIR = 'target/gatling';
+    const resolvedTargetDirectory = pathResolve(GATLING_DIR); // Absolutna ścieżka docelowa
 
-  // Ustalenie ścieżki do bieżącego katalogu skryptu
-  const __filename = fileURLToPath(import.meta.url);
-  const __dirname = dirname(__filename);
+    // Ustalenie ścieżki do bieżącego katalogu skryptu
+    const __filename = fileURLToPath(import.meta.url);
+    const __dirname = dirname(__filename);
 
-  console.log(`Katalog roboczy skryptu: ${process.cwd()}`);
-  console.log(`Katalog skryptu: ${__dirname}`);
-  console.log(`Docelowy katalog raportów: ${resolvedTargetDirectory}`);
-
-
-  try {
-    // --- Kopiowanie zasobów JS do katalogu docelowego ---
-    console.log(`\nSprawdzanie i kopiowanie zasobów JS do: ${resolvedTargetDirectory}`);
-    const reportJsSourcePath = path.join(__dirname, 'report.js');
-    const chartJsSourcePath = pathResolve('node_modules/chart.js/dist/chart.umd.js');
-    const reportJsDestPath = path.join(resolvedTargetDirectory, 'report.js');
-    const chartJsDestPath = path.join(resolvedTargetDirectory, 'chart.umd.js');
-
-    if (!existsSync(reportJsSourcePath)) throw new Error(`Brak pliku report.js w: ${reportJsSourcePath}`);
-    if (!existsSync(chartJsSourcePath)) throw new Error(`Brak pliku chart.umd.js w: ${chartJsSourcePath}. Uruchom 'npm install'.`);
-
-    console.log(`Tworzenie katalogu docelowego (jeśli potrzebne): ${resolvedTargetDirectory}`);
-    mkdirSync(resolvedTargetDirectory, { recursive: true });
-
-    console.log(`Kopiowanie ${reportJsSourcePath} -> ${reportJsDestPath}`);
-    copyFileSync(reportJsSourcePath, reportJsDestPath);
-    console.log(`Kopiowanie ${chartJsSourcePath} -> ${chartJsDestPath}`);
-    copyFileSync(chartJsSourcePath, chartJsDestPath);
-    console.log('Pomyślnie skopiowano zasoby JS.');
-    // --- Koniec kopiowania zasobów JS ---
-
-
-    // --- Wyszukiwanie najnowszych wyników Gatling ---
-    if (!existsSync(GATLING_DIR)) { // Sprawdzenie formalne
-        throw new Error(`Katalog ${GATLING_DIR} nie istnieje mimo próby utworzenia.`);
-    }
-
-    function findLatestDir(baseDir) { // Usunięto : string
-      const dirs = readdirSync(baseDir, { withFileTypes: true })
-        .filter(dirent => dirent.isDirectory() && dirent.name.startsWith('jssimulation-'))
-        .map(dirent => ({ name: dirent.name, path: join(baseDir, dirent.name), time: statSync(join(baseDir, dirent.name)).mtime.getTime() }))
-        .sort((a, b) => b.time - a.time);
-      return dirs.length > 0 ? dirs[0].path : null;
-    }
-
-    const LATEST_DIR = findLatestDir(GATLING_DIR);
-    if (!LATEST_DIR) throw new Error(`Nie znaleziono katalogów jssimulation-* w ${GATLING_DIR}.`);
-    console.log(`\nZnaleziono najnowszy katalog symulacji: ${LATEST_DIR}`);
-
-    const STATS_FILE = join(LATEST_DIR, 'js', 'stats.js');
-    if (!existsSync(STATS_FILE)) throw new Error(`Nie znaleziono pliku ${STATS_FILE}.`);
-    console.log(`Znaleziono plik stats.js: ${STATS_FILE}`);
-    // --- Koniec wyszukiwania wyników ---
-
-
-    // --- Generowanie raportu XML ---
+    // Nazwy bazowe plików wynikowych
     const XML_BASE_NAME = 'TEST-gatling-results.xml';
-    // Zmieniamy ścieżkę docelową XML na katalog target/gatling
-    const resolvedXmlFile = path.join(resolvedTargetDirectory, XML_BASE_NAME);
-
-    console.log(`\nGenerowanie raportu XML do: ${resolvedXmlFile}`);
-    execSync(`node raport.mjs "${pathResolve(STATS_FILE)}" "${resolvedXmlFile}"`, { stdio: 'inherit' });
-
-    if (!existsSync(resolvedXmlFile)) throw new Error(`Nie udało się wygenerować pliku XML: ${resolvedXmlFile}.`);
-    console.log(`Raport XML został wygenerowany: ${resolvedXmlFile}`);
-    // --- Koniec generowania XML ---
-
-
-    // --- Generowanie raportu HTML ---
     const HTML_BASE_NAME = 'gatling-report.html';
-    // Zmieniamy ścieżkę docelową HTML na katalog target/gatling
-    const resolvedHtmlFile = path.join(resolvedTargetDirectory, HTML_BASE_NAME);
 
-    // Ścieżki do JS używane wewnątrz HTML - teraz to tylko nazwy plików,
-    // bo HTML i JS będą w tym samym katalogu (target/gatling)
-    const chartJsHtmlPath = 'chart.umd.js';
-    const reportJsHtmlPath = 'report.js';
+    // Ścieżki do plików w katalogu BIEŻĄCYM (tam, gdzie zapisują pod-skrypty)
+    const xmlSourcePath = pathResolve(XML_BASE_NAME);
+    const htmlSourcePath = pathResolve(HTML_BASE_NAME);
 
-    console.log(`\nGenerowanie raportu HTML do: ${resolvedHtmlFile}`);
-    // Przekazujemy nowe ścieżki XML i HTML oraz proste nazwy plików JS
-    execSync(`node tohtml.mjs "${resolvedXmlFile}" "${resolvedHtmlFile}" "${chartJsHtmlPath}" "${reportJsHtmlPath}"`, { stdio: 'inherit' });
+    // Ścieżki do plików w katalogu DOCELOWYM (target/gatling)
+    const xmlDestPath = path.join(resolvedTargetDirectory, XML_BASE_NAME);
+    const htmlDestPath = path.join(resolvedTargetDirectory, HTML_BASE_NAME);
 
-    if (!existsSync(resolvedHtmlFile)) throw new Error(`Nie udało się wygenerować pliku HTML: ${resolvedHtmlFile}.`);
-    console.log(`Raport HTML został wygenerowany: ${resolvedHtmlFile}`);
-    // --- Koniec generowania HTML ---
 
-    console.log(`\nProces zakończony pomyślnie. Wyniki w katalogu: ${resolvedTargetDirectory}`);
+    console.log(`Katalog roboczy skryptu: ${process.cwd()}`);
+    console.log(`Katalog skryptu: ${__dirname}`);
+    console.log(`Docelowy katalog raportów: ${resolvedTargetDirectory}`);
 
-  } catch (error) {
-    console.error('\n!!! Wystąpił błąd podczas wykonywania skryptu głównego:', error.message);
-    if (error.stack) {
-        console.error(error.stack);
+    try {
+        // --- Kopiowanie zasobów JS do katalogu docelowego ---
+        console.log(`\nSprawdzanie i kopiowanie zasobów JS do: ${resolvedTargetDirectory}`);
+        const reportJsSourcePath = path.join(__dirname, 'report.js');
+        const chartJsSourcePath = pathResolve('node_modules/chart.js/dist/chart.umd.js');
+        const reportJsDestPath = path.join(resolvedTargetDirectory, 'report.js');
+        const chartJsDestPath = path.join(resolvedTargetDirectory, 'chart.umd.js');
+
+        if (!existsSync(reportJsSourcePath)) throw new Error(`Brak pliku report.js w: ${reportJsSourcePath}`);
+        if (!existsSync(chartJsSourcePath)) throw new Error(`Brak pliku chart.umd.js w: ${chartJsSourcePath}. Uruchom 'npm install'.`);
+
+        console.log(`Tworzenie katalogu docelowego (jeśli potrzebne): ${resolvedTargetDirectory}`);
+        mkdirSync(resolvedTargetDirectory, { recursive: true });
+
+        console.log(`Kopiowanie ${reportJsSourcePath} -> ${reportJsDestPath}`);
+        copyFileSync(reportJsSourcePath, reportJsDestPath);
+        console.log(`Kopiowanie ${chartJsSourcePath} -> ${chartJsDestPath}`);
+        copyFileSync(chartJsSourcePath, chartJsDestPath);
+        console.log('Pomyślnie skopiowano zasoby JS.');
+        // --- Koniec kopiowania zasobów JS ---
+
+
+        // --- Wyszukiwanie najnowszych wyników Gatling ---
+        if (!existsSync(GATLING_DIR)) throw new Error(`Katalog ${GATLING_DIR} nie istnieje mimo próby utworzenia.`);
+        function findLatestDir(baseDir) { /* ... (bez zmian) ... */
+            const dirs = readdirSync(baseDir, { withFileTypes: true })
+              .filter(dirent => dirent.isDirectory() && dirent.name.startsWith('jssimulation-'))
+              .map(dirent => ({ name: dirent.name, path: join(baseDir, dirent.name), time: statSync(join(baseDir, dirent.name)).mtime.getTime() }))
+              .sort((a, b) => b.time - a.time);
+            return dirs.length > 0 ? dirs[0].path : null;
+        }
+        const LATEST_DIR = findLatestDir(GATLING_DIR);
+        if (!LATEST_DIR) throw new Error(`Nie znaleziono katalogów jssimulation-* w ${GATLING_DIR}.`);
+        console.log(`\nZnaleziono najnowszy katalog symulacji: ${LATEST_DIR}`);
+        const STATS_FILE = join(LATEST_DIR, 'js', 'stats.js');
+        if (!existsSync(STATS_FILE)) throw new Error(`Nie znaleziono pliku ${STATS_FILE}.`);
+        console.log(`Znaleziono plik stats.js: ${STATS_FILE}`);
+        // --- Koniec wyszukiwania wyników ---
+
+
+        // --- Generowanie raportu XML (zapis do katalogu bieżącego) ---
+        console.log(`\nGenerowanie raportu XML (do katalogu bieżącego: ${xmlSourcePath})`);
+        // Wywołujemy raport.mjs bez podawania ścieżki wyjściowej (lub podając bazową nazwę)
+        execSync(`node raport.mjs "${pathResolve(STATS_FILE)}" "${XML_BASE_NAME}"`, { stdio: 'inherit' });
+
+        // Sprawdzenie, czy plik XML został utworzony w katalogu bieżącym
+        if (!existsSync(xmlSourcePath)) throw new Error(`Nie udało się wygenerować pliku XML w: ${xmlSourcePath}.`);
+        console.log(`Raport XML został wygenerowany: ${xmlSourcePath}`);
+
+        // --- Przenoszenie pliku XML ---
+        console.log(`Przenoszenie ${xmlSourcePath} -> ${xmlDestPath}`);
+        renameSync(xmlSourcePath, xmlDestPath);
+        if (!existsSync(xmlDestPath)) throw new Error(`Nie udało się przenieść pliku XML do: ${xmlDestPath}.`);
+        console.log(`Plik XML przeniesiony do katalogu docelowego.`);
+        // --- Koniec przenoszenia XML ---
+
+
+        // --- Generowanie raportu HTML (zapis do katalogu bieżącego) ---
+        // Ścieżki do JS używane wewnątrz HTML - proste nazwy, bo finalnie HTML i JS będą razem
+        const chartJsHtmlPath = 'chart.umd.js';
+        const reportJsHtmlPath = 'report.js';
+
+        console.log(`\nGenerowanie raportu HTML (do katalogu bieżącego: ${htmlSourcePath})`);
+        // Wywołujemy tohtml.mjs podając ścieżkę do XML (już w target/gatling!)
+        // oraz nazwę pliku HTML do utworzenia w katalogu bieżącym.
+        // Przekazujemy też proste nazwy JS jako arg 3 i 4.
+        execSync(`node tohtml.mjs "${xmlDestPath}" "${HTML_BASE_NAME}" "${chartJsHtmlPath}" "${reportJsHtmlPath}"`, { stdio: 'inherit' });
+
+        // Sprawdzenie, czy plik HTML został utworzony w katalogu bieżącym
+        if (!existsSync(htmlSourcePath)) throw new Error(`Nie udało się wygenerować pliku HTML w: ${htmlSourcePath}.`);
+        console.log(`Raport HTML został wygenerowany: ${htmlSourcePath}`);
+
+        // --- Przenoszenie pliku HTML ---
+        console.log(`Przenoszenie ${htmlSourcePath} -> ${htmlDestPath}`);
+        renameSync(htmlSourcePath, htmlDestPath);
+        if (!existsSync(htmlDestPath)) throw new Error(`Nie udało się przenieść pliku HTML do: ${htmlDestPath}.`);
+        console.log(`Plik HTML przeniesiony do katalogu docelowego.`);
+        // --- Koniec przenoszenia HTML ---
+
+        console.log(`\nProces zakończony pomyślnie. Wyniki w katalogu: ${resolvedTargetDirectory}`);
+
+    } catch (error) {
+        console.error('\n!!! Wystąpił błąd podczas wykonywania skryptu głównego:', error.message);
+        if (error.stack) {
+            console.error(error.stack);
+        }
+        process.exit(1);
     }
-    process.exit(1);
-  }
 }
 
 main();
