@@ -1,22 +1,42 @@
-Uruchomienie testów niezależnie od środowiska
+# Etap pierwszy - bazowy
+FROM node:21-alpine AS base
 
-Aby uruchomić testy w skonteneryzowanym środowisku (Docker lub Podman), wykonaj następujące kroki w repozytorium projektu:
+WORKDIR /app
 
-Zbuduj obraz Docker/Podman:
-Użyj poniższej komendy do zbudowania obrazu z pliku Dockerfile znajdującego się w bieżącym katalogu. Obraz zostanie nazwany perf.
+# Instalacja niezbędnych narzędzi w jednej warstwie
+RUN apk add --no-cache dumb-init wget && \
+    wget --no-check-certificate -O /usr/local/bin/jq -qc https://github.com/stedolan/jq/releases/download/jq-1.6/jq-linux64 && \
+    chmod +x /usr/local/bin/jq
 
-Bash
-podman build -t perf .
-# Alternatywnie, jeśli używasz Dockera:
-# docker build -t perf .
- (Ta komenda buduje obraz na podstawie pliku Dockerfile w bieżącym katalogu i nadaje mu tag "perf".)
+# Konfiguracja środowiska
+ENV NODE_TLS_REJECT_UNAUTHORIZED=0
 
-Uruchom kontener i wykonaj testy:
-Teraz uruchom zbudowany wcześniej obraz. Musisz podać hasło (prawdopodobnie do systemu KC, o czym wspomina notatka) oraz nazwę symulacji/testu do uruchomienia jako zmienne środowiskowe.
+# Etap drugi - instalacja zależności
+FROM base AS dependencies
 
-Bash
-docker run -it -v %cd%:/app/target -e TOKEN_PASSWORD=[[tokenPassword]] -e SIMULATION_NAME=$simulation_perf simulation_perf
-# W miejscu %cd% podstaw ścieżkę do bieżącego katalogu na Twoim systemie hosta (np. ${PWD} na Linux/macOS lub %cd% w Command Prompt na Windows).
-# Zastąp [[tokenPassword]] właściwym hasłem.
-# Zastąp $simulation_perf właściwą nazwą symulacji/testu, który chcesz uruchomić.
- (Ta komenda uruchamia kontener w trybie interaktywnym (-it), mapuje bieżący katalog hosta (%cd%) do katalogu /app/target wewnątrz kontenera (prawdopodobnie do zapisu wyników testów), ustawia wymagane zmienne środowiskowe TOKEN_PASSWORD i SIMULATION_NAME, a na końcu wskazuje nazwę obrazu do uruchomienia (simulation_perf).)
+# Kopiowanie tylko plików package.json
+COPY package*.json ./
+
+# Instalacja zależności
+RUN npm config set strict-ssl false && \
+    npm ci --only=production
+
+# Etap trzeci - finalny
+FROM base AS final
+
+WORKDIR /app
+
+# Kopiowanie tylko zainstalowanych zależności
+COPY --from=dependencies /app/node_modules ./node_modules
+
+# Kopiowanie kodu źródłowego
+COPY . .
+
+# Przygotowanie pliku konfiguracyjnego
+RUN cp sample.env .env
+
+# Uruchomienie jako użytkownik niepriwilegowany
+USER node
+
+# Uruchomienie aplikacji z poprawną obsługą sygnałów
+CMD ["dumb-init", "/bin/sh", "-c", "npm run test"]
