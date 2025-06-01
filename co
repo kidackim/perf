@@ -1,42 +1,63 @@
-# Etap pierwszy - bazowy
-FROM node:21-alpine AS base
+// Plik: injectionProfiles.ts
+import {
+  OpenInjectionStep,
+  atOnceUsers,
+  rampUsers,
+  constantUsersPerSec,
+  rampUsersPerSec,
+  stressPeakUsers,
+  // Możesz potrzebować nothingFor, jeśli tworzysz złożone profile
+  // nothingFor,
+} from '@gatling.io/core';
 
-WORKDIR /app
+// Bazowa liczba użytkowników - może być również konfigurowalna przez zmienną środowiskową
+// Jeśli nie ustawisz BASE_USERS, domyślnie będzie 10.
+const baseNumberOfUsers: number = parseInt(process.env.BASE_USERS || '10', 10);
 
-# Instalacja niezbędnych narzędzi w jednej warstwie
-RUN apk add --no-cache dumb-init wget && \
-    wget --no-check-certificate -O /usr/local/bin/jq -qc https://github.com/stedolan/jq/releases/download/jq-1.6/jq-linux64 && \
-    chmod +x /usr/local/bin/jq
+// Typ dla profilu wstrzykiwania dla lepszej czytelności
+// Profil może być pojedynczym krokiem lub tablicą kroków (dla bardziej złożonych sekwencji)
+type InjectionProfile = OpenInjectionStep | OpenInjectionStep[];
 
-# Konfiguracja środowiska
-ENV NODE_TLS_REJECT_UNAUTHORIZED=0
+// Interfejs opisujący mapę profili
+interface InjectionProfileMap {
+  [key: string]: InjectionProfile;
+}
 
-# Etap drugi - instalacja zależności
-FROM base AS dependencies
+// Mapa dostępnych profili wstrzykiwania
+export const availableProfiles: InjectionProfileMap = {
+  spike: atOnceUsers(baseNumberOfUsers),
+  rampUpUsers: rampUsers(baseNumberOfUsers * 2).during(60), // 60 sekund
+  constantRate: constantUsersPerSec(baseNumberOfUsers / 5.0).during(120), // 120 sekund
+  rampUpRate: rampUsersPerSec(baseNumberOfUsers / 10.0)
+    .to(baseNumberOfUsers / 2.0)
+    .during(60), // 60 sekund
+  stressPeak: stressPeakUsers(baseNumberOfUsers * 3).during(90), // 90 sekund
+  // Przykład bardziej złożonego profilu jako tablica kroków
+  customRampAndHold: [
+    rampUsersPerSec(baseNumberOfUsers / 15.0).to(baseNumberOfUsers / 5.0).during(30), // ramp-up
+    // nothingFor(10), // opcjonalna pauza
+    constantUsersPerSec(baseNumberOfUsers / 5.0).during(60), // hold
+  ],
+};
 
-# Kopiowanie tylko plików package.json
-COPY package*.json ./
+// Domyślna nazwa profilu, jeśli żadna nie zostanie podana
+export const defaultProfileKey = 'spike';
 
-# Instalacja zależności
-RUN npm config set strict-ssl false && \
-    npm ci --only=production
+// Funkcja pomocnicza do pobierania profilu (może być również w głównym pliku symulacji)
+export function getInjectionModel(profileKey?: string | null): InjectionProfile {
+  const keyToUse = profileKey || defaultProfileKey;
+  const selectedProfile = availableProfiles[keyToUse];
 
-# Etap trzeci - finalny
-FROM base AS final
+  if (!selectedProfile) {
+    console.warn(
+      `[Gatling] Profil o nazwie "${keyToUse}" nie został znaleziony. Używam domyślnego profilu: "${defaultProfileKey}".`
+    );
+    return availableProfiles[defaultProfileKey];
+  }
 
-WORKDIR /app
-
-# Kopiowanie tylko zainstalowanych zależności
-COPY --from=dependencies /app/node_modules ./node_modules
-
-# Kopiowanie kodu źródłowego
-COPY . .
-
-# Przygotowanie pliku konfiguracyjnego
-RUN cp sample.env .env
-
-# Uruchomienie jako użytkownik niepriwilegowany
-USER node
-
-# Uruchomienie aplikacji z poprawną obsługą sygnałów
-CMD ["dumb-init", "/bin/sh", "-c", "npm run test"]
+  console.log(`[Gatling] Używam profilu wstrzykiwania: "${keyToUse}"`);
+  if (process.env.BASE_USERS) {
+    console.log(`[Gatling] Bazowa liczba użytkowników (BASE_USERS): ${baseNumberOfUsers}`);
+  }
+  return selectedProfile;
+}
