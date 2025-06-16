@@ -11,7 +11,6 @@
             font-family: 'Inter', sans-serif;
             scroll-behavior: smooth;
         }
-        /* Overriding some prose defaults for a cleaner look */
         .prose h1, .prose h2, .prose h3, .prose h4 {
             color: #1a202c;
         }
@@ -19,7 +18,7 @@
             color: #edf2f7;
         }
         .prose a {
-            color: #FF6600; /* ING Orange */
+            color: #FF6600;
             text-decoration: none;
             font-weight: 500;
         }
@@ -40,11 +39,11 @@
         }
         .pyramid-layer {
             display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center;
-            color: #fff; font-weight: 600; padding: 0.75rem 0.25rem; /* Reduced horizontal padding */
+            color: #fff; font-weight: 600; padding: 0.75rem 0.25rem;
             min-height: 60px;
             border-bottom: 2px solid rgba(255, 255, 255, 0.2);
             transition: all 0.3s ease-in-out;
-            opacity: 0; /* Initially hidden for animation */
+            opacity: 0;
         }
         .pyramid-container.in-view .pyramid-layer {
             animation: buildUp 0.5s ease-out forwards;
@@ -61,7 +60,6 @@
             color: #9ca3af;
         }
 
-        /* General Animation */
         @keyframes fadeInUp {
             from {
                 opacity: 0;
@@ -79,7 +77,6 @@
             animation: fadeInUp 0.6s ease-out forwards;
         }
 
-        /* Pyramid animation */
         @keyframes buildUp {
             from {
                 opacity: 0;
@@ -91,20 +88,18 @@
             }
         }
 
-
-        /* E2E Workflow Animation */
         .workflow-station {
             transition: transform 0.3s ease-in-out, box-shadow 0.3s ease-in-out, border-color 0.3s ease-in-out;
             border: 2px solid transparent;
         }
         .workflow-station.active {
             transform: scale(1.05);
-            border-color: #FF6600; /* ING Orange */
+            border-color: #FF6600;
             box-shadow: 0 0 25px rgba(255, 102, 0, 0.5);
         }
         .tooltip {
             position: absolute;
-            background-color: #005F86; /* ING Blue */
+            background-color: #005F86;
             color: white;
             padding: 8px 12px;
             border-radius: 8px;
@@ -114,7 +109,7 @@
             opacity: 0;
             transition: opacity 0.3s, transform 0.3s;
             transform: translateY(10px);
-            pointer-events: none; /* Make sure it doesn't block clicks */
+            pointer-events: none;
             width: max-content;
         }
         .tooltip.visible {
@@ -539,7 +534,6 @@
                 stations.forEach(s => s.el.classList.remove('active'));
                 tooltip.classList.remove('visible');
 
-                // Start immediately
                 setTimeout(nextStep, 100);
             }
 
