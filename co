@@ -1,63 +1,579 @@
-// Plik: injectionProfiles.ts
-import {
-  OpenInjectionStep,
-  atOnceUsers,
-  rampUsers,
-  constantUsersPerSec,
-  rampUsersPerSec,
-  stressPeakUsers,
-  // Możesz potrzebować nothingFor, jeśli tworzysz złożone profile
-  // nothingFor,
-} from '@gatling.io/core';
+<!DOCTYPE html>
+<html lang="pl" xmlns="http://www.w3.org/1999/html">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Strategia Testów w Tribe – Kompleksowy Dokument</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            scroll-behavior: smooth;
+        }
+        /* Overriding some prose defaults for a cleaner look */
+        .prose h1, .prose h2, .prose h3, .prose h4 {
+            color: #1a202c;
+        }
+        .dark .prose h1, .dark .prose h2, .dark .prose h3, .dark .prose h4 {
+            color: #edf2f7;
+        }
+        .prose a {
+            color: #FF6600; /* ING Orange */
+            text-decoration: none;
+            font-weight: 500;
+        }
+        .prose a:hover {
+            text-decoration: underline;
+        }
+        .dark .prose a {
+            color: #FF8C42;
+        }
+        .prose strong {
+             color: #1a202c;
+        }
+        .dark .prose strong {
+             color: #edf2f7;
+        }
+        .prose blockquote {
+            border-left-color: #FF6600;
+        }
+        .pyramid-layer {
+            display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center;
+            color: #fff; font-weight: 600; padding: 0.75rem 0.25rem; /* Reduced horizontal padding */
+            min-height: 60px;
+            border-bottom: 2px solid rgba(255, 255, 255, 0.2);
+            transition: all 0.3s ease-in-out;
+            opacity: 0; /* Initially hidden for animation */
+        }
+        .pyramid-container.in-view .pyramid-layer {
+            animation: buildUp 0.5s ease-out forwards;
+        }
+        .tool-tag {
+            display: inline-block; background-color: rgba(0, 0, 0, 0.2);
+            padding: 2px 8px; border-radius: 999px; font-size: 0.75rem;
+            font-weight: 500; margin-top: 4px;
+        }
+        .flow-arrow {
+            position: relative; align-self: center; margin: 0.5rem 0;
+        }
+        .flow-arrow svg {
+            color: #9ca3af;
+        }
 
-// Bazowa liczba użytkowników - może być również konfigurowalna przez zmienną środowiskową
-// Jeśli nie ustawisz BASE_USERS, domyślnie będzie 10.
-const baseNumberOfUsers: number = parseInt(process.env.BASE_USERS || '10', 10);
+        /* General Animation */
+        @keyframes fadeInUp {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        .animated-section {
+            opacity: 0;
+        }
+        .animated-section.in-view {
+            animation: fadeInUp 0.6s ease-out forwards;
+        }
 
-// Typ dla profilu wstrzykiwania dla lepszej czytelności
-// Profil może być pojedynczym krokiem lub tablicą kroków (dla bardziej złożonych sekwencji)
-type InjectionProfile = OpenInjectionStep | OpenInjectionStep[];
+        /* Pyramid animation */
+        @keyframes buildUp {
+            from {
+                opacity: 0;
+                transform: scale(0.8);
+            }
+            to {
+                opacity: 1;
+                transform: scale(1);
+            }
+        }
 
-// Interfejs opisujący mapę profili
-interface InjectionProfileMap {
-  [key: string]: InjectionProfile;
-}
 
-// Mapa dostępnych profili wstrzykiwania
-export const availableProfiles: InjectionProfileMap = {
-  spike: atOnceUsers(baseNumberOfUsers),
-  rampUpUsers: rampUsers(baseNumberOfUsers * 2).during(60), // 60 sekund
-  constantRate: constantUsersPerSec(baseNumberOfUsers / 5.0).during(120), // 120 sekund
-  rampUpRate: rampUsersPerSec(baseNumberOfUsers / 10.0)
-    .to(baseNumberOfUsers / 2.0)
-    .during(60), // 60 sekund
-  stressPeak: stressPeakUsers(baseNumberOfUsers * 3).during(90), // 90 sekund
-  // Przykład bardziej złożonego profilu jako tablica kroków
-  customRampAndHold: [
-    rampUsersPerSec(baseNumberOfUsers / 15.0).to(baseNumberOfUsers / 5.0).during(30), // ramp-up
-    // nothingFor(10), // opcjonalna pauza
-    constantUsersPerSec(baseNumberOfUsers / 5.0).during(60), // hold
-  ],
-};
+        /* E2E Workflow Animation */
+        .workflow-station {
+            transition: transform 0.3s ease-in-out, box-shadow 0.3s ease-in-out, border-color 0.3s ease-in-out;
+            border: 2px solid transparent;
+        }
+        .workflow-station.active {
+            transform: scale(1.05);
+            border-color: #FF6600; /* ING Orange */
+            box-shadow: 0 0 25px rgba(255, 102, 0, 0.5);
+        }
+        .tooltip {
+            position: absolute;
+            background-color: #005F86; /* ING Blue */
+            color: white;
+            padding: 8px 12px;
+            border-radius: 8px;
+            font-size: 0.875rem;
+            font-weight: 500;
+            z-index: 20;
+            opacity: 0;
+            transition: opacity 0.3s, transform 0.3s;
+            transform: translateY(10px);
+            pointer-events: none; /* Make sure it doesn't block clicks */
+            width: max-content;
+        }
+        .tooltip.visible {
+            opacity: 1;
+            transform: translateY(0);
+        }
+        .tooltip::after {
+            content: '';
+            position: absolute;
+            bottom: 100%;
+            left: 50%;
+            margin-left: -5px;
+            border-width: 5px;
+            border-style: solid;
+            border-color: transparent transparent #005F86 transparent;
+        }
+        .data-source-block {
+            background-color: #f3f4f6;
+            border-left: 4px solid #FF6600;
+            padding: 1rem 1.5rem;
+            border-radius: 0 8px 8px 0;
+        }
+        .dark .data-source-block {
+             background-color: #1f2937;
+             border-left-color: #FF8C42;
+        }
+    </style>
+</head>
+<body class="bg-gray-50 dark:bg-gray-900 text-gray-800 dark:text-gray-200">
 
-// Domyślna nazwa profilu, jeśli żadna nie zostanie podana
-export const defaultProfileKey = 'spike';
+<div class="bg-white dark:bg-gray-800 shadow-md sticky top-0 z-50">
+    <nav class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div class="flex items-center justify-between h-20">
+            <div class="flex-shrink-0">
+                <img class="h-10" src="https://upload.wikimedia.org/wikipedia/commons/4/4b/ING_logo.png" alt="Logo ING">
+            </div>
+            <div class="hidden md:block">
+                <div class="ml-10 flex items-baseline space-x-4">
+                    <a href="#wprowadzenie" class="text-gray-700 dark:text-gray-300 hover:text-orange-500 px-3 py-2 rounded-md text-sm font-medium">Wprowadzenie</a>
+                    <a href="#stan_obecny" class="text-gray-700 dark:text-gray-300 hover:text-orange-500 px-3 py-2 rounded-md text-sm font-medium">Analiza</a>
+                    <a href="#uzasadnienie" class="text-gray-700 dark:text-gray-300 hover:text-orange-500 px-3 py-2 rounded-md text-sm font-medium">Uzasadnienie</a>
+                    <a href="#wizja_docelowa" class="text-gray-700 dark:text-gray-300 hover:text-orange-500 px-3 py-2 rounded-md text-sm font-medium">Wizja</a>
+                    <a href="#proces_orkiestracji" class="text-gray-700 dark:text-gray-300 hover:text-orange-500 px-3 py-2 rounded-md text-sm font-medium">Proces</a>
+                    <a href="#implementacja" class="text-gray-700 dark:text-gray-300 hover:text-orange-500 px-3 py-2 rounded-md text-sm font-medium">Wdrożenie</a>
+                </div>
+            </div>
+        </div>
+    </nav>
+</div>
 
-// Funkcja pomocnicza do pobierania profilu (może być również w głównym pliku symulacji)
-export function getInjectionModel(profileKey?: string | null): InjectionProfile {
-  const keyToUse = profileKey || defaultProfileKey;
-  const selectedProfile = availableProfiles[keyToUse];
+<main class="max-w-5xl mx-auto px-4 py-8 sm:px-6 sm:py-12 lg:px-8">
+    <header class="text-center py-16 lg:py-24 animated-section">
+        <p class="text-base font-semibold text-orange-600 tracking-wide uppercase">Nowe Podejście do Zapewnienia Jakości</p>
+        <h1 class="mt-2 text-4xl font-extrabold text-gray-900 dark:text-white tracking-tight sm:text-5xl lg:text-6xl">Strategia Testów w Tribe: Ujednolicenie i Automatyzacja</h1>
+        <div class="mt-8 text-lg text-gray-600 dark:text-gray-400 space-y-1">
+            <p><strong>Autor:</strong> Mariusz Kidacki</p>
+            <p><strong>Pod przewodnictwem:</strong> Aleksander Lorenz</p>
+            <p>Wersja: 1.0 | Data: 15 czerwca 2025 | Status: Wersja robocza</p>
+        </div>
+    </header>
 
-  if (!selectedProfile) {
-    console.warn(
-      `[Gatling] Profil o nazwie "${keyToUse}" nie został znaleziony. Używam domyślnego profilu: "${defaultProfileKey}".`
-    );
-    return availableProfiles[defaultProfileKey];
-  }
+    <section id="executive_summary" class="not-prose bg-gray-100 dark:bg-gray-800 p-8 rounded-xl my-16 shadow-md animated-section">
+        <h2 class="text-3xl font-semibold mt-0 mb-6 text-center text-gray-900 dark:text-white">Streszczenie dla Kierownictwa</h2>
+        <div class="space-y-4 text-base text-gray-700 dark:text-gray-300">
+            <p><strong>Problem:</strong> Obecne procesy testowe w Tribe są zdecentralizowane, niespójne i w dużej mierze manualne. Prowadzi to do problemów ze stabilnością środowisk, wydłuża czas dostarczania oprogramowania, podnosi koszty utrzymania i utrudnia skalowanie operacji.</p>
+            <p><strong>Propozycja:</strong> Wdrożenie centralnej, ujednoliconej platformy testowej w modelu "Testing as a Service". Rozwiązanie oparte na technologiach Docker i Kubernetes dostarczy wszystkim zespołom deweloperskim powtarzalne, izolowane środowiska testowe na żądanie, zautomatyzuje proces uruchamiania testów i scentralizuje raportowanie.</p>
+            <p><strong>Kluczowe Korzyści:</strong>
+            <ul class="list-disc pl-5">
+                <li><strong>Przyspieszenie Time-to-Market:</strong> Drastyczne skrócenie cyklu testowego z dni/godzin do minut.</li>
+                <li><strong>Redukcja Kosztów:</strong> Zmniejszenie liczby błędów na produkcji i ograniczenie manualnej pracy testerów.</li>
+                <li><strong>Wzrost Jakości i Niezawodności:</strong> Eliminacja problemu "działa na mojej maszynie" dzięki spójnym, skonteneryzowanym środowiskom.</li>
+                <li><strong>Zwiększenie Produktywności Deweloperów:</strong> Uwolnienie inżynierów od problemów z infrastrukturą testową.</li>
+            </ul>
 
-  console.log(`[Gatling] Używam profilu wstrzykiwania: "${keyToUse}"`);
-  if (process.env.BASE_USERS) {
-    console.log(`[Gatling] Bazowa liczba użytkowników (BASE_USERS): ${baseNumberOfUsers}`);
-  }
-  return selectedProfile;
-}
+            <p><strong>Inwestycja:</strong> Projekt wymaga alokacji dedykowanego zespołu (Platform Engineering/DevOps) do budowy i utrzymania platformy oraz zaangażowania zespołów w proces migracji. Jest to strategiczna inwestycja w zdolność ING do szybszego i bardziej niezawodnego dostarczania innowacji.</p>
+        </div>
+    </section>
+
+    <div class="prose prose-lg dark:prose-invert max-w-none">
+        <nav id="spis-tresci" class="bg-gray-100 dark:bg-gray-800 p-8 rounded-xl my-16 shadow-md animated-section">
+            <h2 class="!text-3xl !font-semibold !mt-0 !mb-6 text-center">Spis Treści</h2>
+            <ol class="list-decimal space-y-3 pl-6 text-lg">
+                <li><a href="#wprowadzenie" class="hover:text-orange-400 transition-colors">Wprowadzenie i Cele Strategiczne</a></li>
+                <li><a href="#stan_obecny" class="hover:text-orange-400 transition-colors">Stan Obecny: Analiza Procesów Testowych</a>
+                    <ul class="list-disc pl-6 text-base space-y-1 mt-2">
+                        <li><a href="#analiza_zespolow" class="hover:text-orange-400 transition-colors">Szczegółowa Analiza Zespołów</a></li>
+                        <li><a href="#zrodla_danych" class="hover:text-orange-400 transition-colors">Źródła Danych dla Analizy</a></li>
+                    </ul>
+                </li>
+                <li><a href="#uzasadnienie" class="hover:text-orange-400 transition-colors">Uzasadnienie Strategii i Analiza Korzyści</a></li>
+                <li><a href="#wizja_docelowa" class="hover:text-orange-400 transition-colors">Wizja Docelowa: Ujednolicona Platforma Testowa</a></li>
+                <li><a href="#proces_orkiestracji" class="hover:text-orange-400 transition-colors">Szczegółowy Proces Orkiestracji Testów</a></li>
+                <li><a href="#implementacja" class="hover:text-orange-400 transition-colors">Implementacja: Wymagania i Wyzwania</a></li>
+                <li><a href="#slownik" class="hover:text-orange-400 transition-colors">Słownik Pojęć</a></li>
+                <li><a href="#zalaczniki" class="hover:text-orange-400 transition-colors">Załączniki</a></li>
+            </ol>
+        </nav>
+
+        <section id="wprowadzenie" class="space-y-6 scroll-mt-24 animated-section">
+            <h2 class="!text-3xl !font-semibold border-b-2 border-orange-500 pb-2">1. Wprowadzenie i Cele Strategiczne</h2>
+            <h3>1.1. Kontekst Biznesowy</h3>
+            <p>W dynamicznie rozwijającym się środowisku technologicznym, szybkość i jakość dostarczanego oprogramowania są kluczowymi czynnikami sukcesu. Obecne zróżnicowanie procesów i narzędzi testowych w poszczególnych zespołach Tribe, mimo że pozwala na realizację bieżących zadań, prowadzi do powstawania silosów wiedzy, problemów ze spójnością środowisk oraz utrudnia efektywne zarządzanie jakością na poziomie całej organizacji.</p>
+            <h3>1.2. Myśl Przewodnia: Jeden Tribe, Jeden Standard Testowania</h3>
+            <p>Niniejszy dokument przedstawia strategię transformacji podejścia do testowania. Jej myślą przewodnią jest ujednolicenie procesów i stworzenie centralnego, wysoce zautomatyzowanego narzędzia do zarządzania i uruchamiania testów. Celem jest przejście od rozproszonych, często manualnych praktyk do modelu <strong>"Testing as a Service"</strong>, gdzie każdy zespół dysponuje spójnym, niezawodnym i skalowalnym środowiskiem do weryfikacji jakości swoich produktów.</p>
+            <h3>1.3. Główne Cele Inicjatywy</h3>
+            <ul class="list-disc pl-6 space-y-2">
+                <li><strong>Usystematyzowanie wiedzy</strong> o testach w całym Tribe.</li>
+                <li><strong>Standaryzacja narzędzi i procesów</strong> w celu zwiększenia efektywności i redukcji kosztów.</li>
+                <li><strong>Stworzenie ujednoliconej, skalowalnej platformy testowej</strong> opartej o konteneryzację.</li>
+                <li><strong>Zwiększenie niezawodności i powtarzalności</strong> testów poprzez eliminację problemów środowiskowych.</li>
+                <li><strong>Skrócenie pętli feedbacku</strong> (czasu od zmiany w kodzie do uzyskania wyniku testu).</li>
+                <li><strong>Stworzenie jednego, centralnego miejsca</strong> do wymiany wiedzy i analizy wyników testów.</li>
+            </ul>
+        </section>
+
+        <hr class="my-16 border-gray-200 dark:border-gray-700">
+
+        <section id="stan_obecny" class="space-y-6 scroll-mt-24 animated-section">
+            <h2 class="!text-3xl !font-semibold border-b-2 border-orange-500 pb-2">2. Stan Obecny: Analiza Procesów Testowych</h2>
+            <h3>2.1. Ogólne Wyzwania i Obserwacje</h3>
+            <p>Na podstawie wstępnego zebrania informacji zidentyfikowano powtarzające się wyzwania:</p>
+            <ul>
+                <li><strong>Dokumentacja:</strong> Często nieformalna, nieaktualna lub jej brak.</li>
+                <li><strong>Środowiska:</strong> Problemy z dostępnością i konfiguracją.</li>
+                <li><strong>Automatyzacja:</strong> Zróżnicowany poziom, duże poleganie na testach manualnych.</li>
+            </ul>
+            <h3 id="analiza_zespolow" class="scroll-mt-24">2.2. Szczegółowa Analiza Zespołów</h3>
+            <p class="mb-8">Poniżej znajduje się wizualna i opisowa analiza strategii testowych w zdiagnozowanych zespołach.</p>
+
+            <div class="not-prose my-16 grid grid-cols-1 lg:grid-cols-3 gap-8">
+                <div class="pyramid-container flex flex-col items-center p-6 bg-gray-100 dark:bg-gray-800 rounded-xl shadow-lg transform hover:scale-105 transition-transform duration-300"><h3 class="text-xl font-semibold text-center text-red-500 dark:text-red-400 mb-4 h-16 flex items-center justify-center">Zespół Płatności (Agnieszka)</h3><div class="flex flex-col items-center space-y-0 w-full mb-4"><div class="pyramid-layer bg-red-600 dark:bg-red-700 w-full rounded-t-lg" style="animation-delay: 0.3s;"><div><p class="text-sm">Testy UI</p><span class="tool-tag">Nightwatch</span></div></div><div class="pyramid-layer bg-red-500 dark:bg-red-600 w-2/3" style="animation-delay: 0.15s;"><div><p class="text-sm">Testy API (manualne)</p><span class="tool-tag">Postman</span></div></div><div class="pyramid-layer bg-red-400 dark:bg-red-500 w-1/3 rounded-b-lg"><div><p class="text-xs">Jednost.</p><span class="tool-tag text-xs opacity-70">Brak danych</span></div></div></div><div class="text-sm text-gray-600 dark:text-gray-400 text-center px-2"><strong>Wnioski:</strong> Strategia niestabilna, zależna od wolnych testów UI.</div></div>
+                <div class="pyramid-container flex flex-col items-center p-6 bg-gray-100 dark:bg-gray-800 rounded-xl shadow-lg transform hover:scale-105 transition-transform duration-300"><h3 class="text-xl font-semibold text-center text-amber-500 dark:text-amber-400 mb-4 h-16 flex items-center justify-center">Zespół Backend/PMF (Tomasz)</h3><div class="flex flex-col items-center space-y-0 w-full mb-4"><div class="pyramid-layer bg-amber-600 dark:bg-amber-700 w-1/2 rounded-t-lg" style="animation-delay: 0.3s;"><div><p class="text-sm">Testy E2E (BE)</p><span class="tool-tag">Nightwatch</span></div></div><div class="pyramid-layer bg-amber-500 dark:bg-amber-600 w-full" style="animation-delay: 0.15s;"><div><p class="text-sm">Testy Integracyjne</p><span class="tool-tag">Cucumber</span></div></div><div class="pyramid-layer bg-amber-400 dark:bg-amber-500 w-1/2 rounded-b-lg"><div><p class="text-xs">Jednost.</p><span class="tool-tag text-xs opacity-70">Brak danych</span></div></div></div><div class="text-sm text-gray-600 dark:text-gray-400 text-center px-2"><strong>Wnioski:</strong> Lepszy balans, ale ryzyko związane z mockami i współdzielonym środowiskiem.</div></div>
+                <div class="pyramid-container flex flex-col items-center p-6 bg-gray-100 dark:bg-gray-800 rounded-xl shadow-lg transform hover:scale-105 transition-transform duration-300"><h3 class="text-xl font-semibold text-center text-sky-500 dark:text-sky-400 mb-4 h-16 flex items-center justify-center">Zespół Mariusza</h3><div class="flex flex-col items-center space-y-0 w-full mb-4"><div class="pyramid-layer bg-sky-600 dark:bg-sky-700 w-full rounded-t-lg" style="animation-delay: 0.3s;"><div><p class="text-sm">Funkcjonalne</p><span class="tool-tag">Cypress</span></div></div><div class="pyramid-layer bg-sky-500 dark:bg-sky-600 w-2/3" style="animation-delay: 0.15s;"><div><p class="text-sm">Wydajnościowe</p><span class="tool-tag">Gatling-ts</span></div></div><div class="pyramid-layer bg-sky-400 dark:bg-sky-500 w-1/3 rounded-b-lg"><div><p class="text-xs">Jednost.</p><span class="tool-tag text-xs opacity-70">Brak danych</span></div></div></div><div class="text-sm text-gray-600 dark:text-gray-400 text-center px-2"><strong>Wnioski:</strong> Dobra automatyzacja, ale brak testów jednostkowych stanowi główne ryzyko.</div></div>
+            </div>
+
+            <h3 id="zrodla_danych" class="scroll-mt-24">2.3. Źródła Danych dla Analizy</h3>
+            <p>Powyższe wizualizacje piramid testowych powstały na bazie informacji zebranych podczas spotkań i burzy mózgów z przedstawicielami zespołów. Poniżej znajduje się zestawienie kluczowych punktów.</p>
+            <div class="space-y-8">
+                <div class="data-source-block">
+                    <h4>Dane wejściowe od Agnieszki (Zespół Płatności)</h4>
+                    <ul class="text-sm">
+                        <li>"Główne oparcie na testach frontowych, realizowanych przez automaty Front Nightwatch."</li>
+                        <li>"Dodatkowe testy API są wykonywane w Postmanie, ich zakres i częstotliwość zależą od potrzeb."</li>
+                        <li>"Testy Wydajnościowe: Realizowane przy użyciu Gatlinga. Odpalane lokalnie w zależności od potrzeby, nie są uruchamiane w Azure."</li>
+                        <li>"Pozostałe testy są głównie manualne. Bieżąca liczba testów manualnych uniemożliwia pozyskiwanie nowej wiedzy."</li>
+                    </ul>
+                </div>
+                <div class="data-source-block">
+                    <h4>Dane wejściowe od Tomasza (Zespół Backend/PMF)</h4>
+                    <ul class="text-sm">
+                        <li>"Główne testy do Nightwatch pokryte są w większości przez niego."</li>
+                        <li>"Wykorzystuje częściowo Nightwatcha dla testów BE, które działają na UAT i nie na mockach."</li>
+                        <li>"Wykorzystywany jest framework Cucumber, który jest mockowany."</li>
+                        <li>"Testy integracyjne aplikacji PMF są wykonywane z wykorzystaniem VDI."</li>
+                        <li>"Testy Wydajnościowe: Realizowane przy użyciu Gatlinga, związane z przejściem na chmurę."</li>
+                    </ul>
+                </div>
+            </div>
+
+            <h3 class="pt-8">2.4. [Miejsce na analizę kolejnych zespołów]</h3>
+            <p class="text-gray-500 italic">(Ta sekcja zostanie uzupełniona po zebraniu informacji z pozostałych zespołów: Squad 3, 4, 7, 9, 10, 11, 12. Format analizy będzie spójny z powyższymi przykładami.)</p>
+        </section>
+
+        <hr class="my-16 border-gray-200 dark:border-gray-700">
+
+        <section id="uzasadnienie" class="space-y-6 scroll-mt-24 animated-section">
+            <h2 class="!text-3xl !font-semibold border-b-2 border-orange-500 pb-2">3. Uzasadnienie Strategii i Analiza Korzyści</h2>
+            <h3>3.1. Dlaczego Standaryzacja? Dowody z Rynku</h3>
+            <p>Proponowane ujednolicenie procesów nie jest celem samym w sobie, lecz środkiem do osiągnięcia wymiernych korzyści biznesowych. Badania rynkowe i praktyki liderów technologicznych jednoznacznie wskazują na pozytywną korelację między standaryzacją narzędzi a efektywnością dostarczania oprogramowania. To podejście, znane jako <strong>Platform Engineering</strong>, jest obecnie jednym z kluczowych trendów w branży.</p>
+
+            <h4>Przykłady Liderów Technologicznych</h4>
+            <p>Wiele wiodących firm technologicznych zainwestowało w budowę wewnętrznych platform deweloperskich, których kluczowym elementem są zunifikowane systemy testowania:</p>
+            <ul>
+                <li><strong>Spotify:</strong> Opracowało wewnętrzną platformę <a href="https://engineering.atspotify.com/2020/08/17/how-we-use-golden-paths-to-solve-fragmentation-in-our-software-ecosystem/" target="_blank">"Golden Paths"</a>, aby ujednolicić proces tworzenia oprogramowania. Jak sami piszą: <em>"Zapewnienie złotych ścieżek dla typowych zadań, takich jak tworzenie nowego serwisu, uwalnia naszych inżynierów od podejmowania powtarzalnych decyzji i pozwala im skupić się na problemie, który próbują rozwiązać."</em> Nasza platforma testowa jest właśnie taką "złotą ścieżką" dla zapewnienia jakości.</li>
+                <li><strong>Netflix:</strong> Jest pionierem w dziedzinie inżynierii niezawodności i testowania w środowisku produkcyjnym. Ich narzędzia do "Chaos Engineering" (np. Chaos Monkey) są częścią większej platformy, która pozwala deweloperom na bezpieczne eksperymentowanie i testowanie odporności systemów. To pokazuje, jak dojrzałe organizacje inwestują w zaawansowane, scentralizowane narzędzia do weryfikacji jakości.</li>
+                <li><strong>Uber:</strong> Zbudował platformę do testowania aplikacji mobilnych na dużą skalę, która pozwala na równoległe uruchamianie tysięcy testów na setkach urządzeń. W artykule na swoim blogu inżynierskim wyjaśniają, że standaryzacja była kluczem do skalowania: <em>"Stworzenie jednej, spójnej platformy pozwoliło nam na redukcję duplikacji wysiłków i zapewnienie spójnych wyników dla wszystkich zespołów mobilnych."</em></li>
+            </ul>
+
+            <h4>Dowody Naukowe i Branżowe</h4>
+            <p>Raport <strong>DORA (DevOps Research and Assessment)</strong>, corocznie publikowany przez Google, wykazuje, że elitarne organizacje (tzw. "Elite performers") charakteryzują się wysokim stopniem automatyzacji i wykorzystaniem wewnętrznych platform. Jak czytamy w raporcie z 2021 roku: <em>"Wewnętrzne platformy, które przyspieszają rozwój i dostarczanie, są silnym wskaźnikiem najwyższej wydajności"</em>. Takie platformy redukują obciążenie kognitywne deweloperów, pozwalając im skupić się na tworzeniu wartości biznesowej, a nie na walce z infrastrukturą.</p>
+
+            <blockquote>"Organizacje z wewnętrznymi platformami mają 1.6 raza większe prawdopodobieństwo osiągnięcia, a nawet przekroczenia, swoich celów biznesowych." - <cite>Puppet, State of DevOps Report</cite></blockquote>
+
+            <p>Martin Fowler, jeden z sygnatariuszy Manifestu Agile, w swoim artykule na temat <a href="https://martinfowler.com/bliki/TestPyramid.html" target="_blank">Piramida Testów</a>, podkreśla znaczenie solidnych fundamentów w postaci szybkich testów jednostkowych. Nasza propozycja bezpośrednio adresuje ten problem, promując zrównoważoną strategię, w przeciwieństwie do obecnych, często niestabilnych "odwróconych piramid".</p>
+
+            <h3>3.2. Porównanie: Przed i Po Wdrożeniu Platformy</h3>
+            <p>Wprowadzenie ujednoliconej platformy testowej przyniesie fundamentalną zmianę w codziennej pracy zespołów. Poniższa tabela ilustruje kluczowe różnice.</p>
+
+            <div class="not-prose my-8 overflow-x-auto">
+                <table class="w-full text-sm text-left text-gray-500 dark:text-gray-400">
+                    <thead class="text-xs text-gray-700 uppercase bg-gray-200 dark:bg-gray-700 dark:text-gray-400">
+                    <tr>
+                        <th scope="col" class="px-6 py-3">Aspekt</th>
+                        <th scope="col" class="px-6 py-3">Stan Obecny (Bez Platformy)</th>
+                        <th scope="col" class="px-6 py-3">Stan Docelowy (Z Platformą)</th>
+                    </tr>
+                    </thead>
+                    <tbody>
+                    <tr class="bg-white border-b dark:bg-gray-800 dark:border-gray-700">
+                        <th scope="row" class="px-6 py-4 font-medium text-gray-900 whitespace-nowrap dark:text-white">Środowiska Testowe</th>
+                        <td class="px-6 py-4">Niespójne, często konfigurowane manualnie, zawodne ("u mnie działa").</td>
+                        <td class="px-6 py-4 font-semibold text-orange-600 dark:text-orange-400">W pełni zautomatyzowane, spójne, izolowane i powtarzalne (Docker + K8s).</td>
+                    </tr>
+                    <tr class="bg-gray-50 border-b dark:bg-gray-900 dark:border-gray-700">
+                        <th scope="row" class="px-6 py-4 font-medium text-gray-900 whitespace-nowrap dark:text-white">Uruchamianie Testów</th>
+                        <td class="px-6 py-4">Często manualne, lokalne, zależne od dostępności konkretnej osoby.</td>
+                        <td class="px-6 py-4 font-semibold text-orange-600 dark:text-orange-400">Na żądanie przez każdego członka zespołu (CLI/API), zintegrowane z CI/CD.</td>
+                    </tr>
+                    <tr class="bg-white border-b dark:bg-gray-800 dark:border-gray-700">
+                        <th scope="row" class="px-6 py-4 font-medium text-gray-900 whitespace-nowrap dark:text-white">Pętla Feedbacku</th>
+                        <td class="px-6 py-4">Długa, wyniki testów dostępne po wielu godzinach lub dniach.</td>
+                        <td class="px-6 py-4 font-semibold text-orange-600 dark:text-orange-400">Krótka, wyniki dostępne w ciągu minut dzięki równoległemu wykonaniu.</td>
+                    </tr>
+                    <tr class="bg-gray-50 border-b dark:bg-gray-900 dark:border-gray-700">
+                        <th scope="row" class="px-6 py-4 font-medium text-gray-900 whitespace-nowrap dark:text-white">Analiza Wyników</th>
+                        <td class="px-6 py-4">Rozproszona, brak centralnego miejsca, trudna analiza trendów.</td>
+                        <td class="px-6 py-4 font-semibold text-orange-600 dark:text-orange-400">Scentralizowany portal z raportami, historia wykonań, analiza trendów.</td>
+                    </tr>
+                    <tr class="bg-white border-b dark:bg-gray-800 dark:border-gray-700">
+                        <th scope="row" class="px-6 py-4 font-medium text-gray-900 whitespace-nowrap dark:text-white">Wdrożenie Nowego Testera</th>
+                        <td class="px-6 py-4">Długotrwałe, wymaga przekazywania nieudokumentowanej wiedzy.</td>
+                        <td class="px-6 py-4 font-semibold text-orange-600 dark:text-orange-400">Szybkie, oparte na jasnej dokumentacji i jednym, standardowym procesie.</td>
+                    </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <h3>3.3. Pozytywny Wpływ na Kulturę i Biznes</h3>
+            <p>Inwestycja w platformę testową to nie tylko zmiana technologiczna, ale przede wszystkim kulturowa. Jak dowodzą autorzy książki <strong>"Accelerate: The Science of Lean Software and DevOps"</strong>, organizacje o wysokiej wydajności traktują jakość jako wspólną odpowiedzialność całego zespołu, a nie zadanie jednego działu. Nasza platforma wspiera tę filozofię, dając deweloperom proste narzędzia do samodzielnego uruchamiania testów i weryfikacji swoich zmian. Prowadzi to do wcześniejszego wykrywania błędów, co drastycznie obniża koszt ich naprawy i podnosi ogólną jakość produktu. Wprowadzenie takiego rozwiązania to strategiczna inwestycja w zdolność całej organizacji do szybszego i bezpieczniejszego dostarczania wartości klientom.</p>
+        </section>
+
+        <hr class="my-16 border-gray-200 dark:border-gray-700">
+
+        <section id="wizja_docelowa" class="space-y-6 scroll-mt-24 animated-section">
+            <h2 class="!text-3xl !font-semibold border-b-2 border-orange-500 pb-2">4. Wizja Docelowa: Ujednolicona Platforma Testowa</h2>
+            <p>Celem jest stworzenie wewnętrznej platformy, która abstrahuje od testera złożoność konfiguracji środowiska. Tester skupia się na pisaniu wartościowych scenariuszy testowych, a platforma dostarcza na żądanie w pełni skonfigurowane, izolowane i powtarzalne środowisko do ich uruchomienia.</p>
+
+            <div class="not-prose my-12">
+                <div class="w-full bg-gray-200 dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-lg p-6">
+                    <h4 class="text-xl font-bold text-center text-gray-700 dark:text-gray-300 mb-4">Ekosystem Klastra Kubernetes</h4>
+                    <div class="w-full bg-gray-300 dark:bg-gray-800 border border-gray-400 dark:border-gray-600 rounded-lg p-6">
+                        <h5 class="text-lg font-bold text-center text-gray-700 dark:text-gray-300 mb-6">Klaster Kubernetes (AKS/EKS/GKE)</h5>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                            <div class="bg-orange-500/10 dark:bg-orange-500/20 p-3 rounded-lg text-center transform hover:scale-105 transition-transform duration-200"><p class="font-semibold text-orange-800 dark:text-orange-300 text-sm">Pod: Zespół A - Testy UI</p><span class="tool-tag bg-orange-500 text-white">Docker: Cypress</span></div>
+                            <div class="bg-red-500/10 dark:bg-red-500/20 p-3 rounded-lg text-center transform hover:scale-105 transition-transform duration-200"><p class="font-semibold text-red-800 dark:text-red-300 text-sm">Pod: Zespół D - Testy UI</p><span class="tool-tag bg-red-500 text-white">Docker: Nightwatch</span></div>
+                            <div class="bg-amber-500/10 dark:bg-amber-500/20 p-3 rounded-lg text-center transform hover:scale-105 transition-transform duration-200"><p class="font-semibold text-amber-800 dark:text-amber-300 text-sm">Pod: Zespół B - Testy BE</p><span class="tool-tag bg-amber-500 text-white">Docker: Cucumber</span></div>
+                            <div class="bg-sky-500/10 dark:bg-sky-500/20 p-3 rounded-lg text-center transform hover:scale-105 transition-transform duration-200"><p class="font-semibold text-sky-800 dark:text-sky-300 text-sm">Pod: Zespół C - Funkcjonalne</p><span class="tool-tag bg-sky-500 text-white">Docker: Cypress</span></div>
+                            <div class="bg-blue-500/10 dark:bg-blue-500/20 p-3 rounded-lg text-center transform hover:scale-105 transition-transform duration-200"><p class="font-semibold text-blue-800 dark:text-blue-300 text-sm">Pod: Zespół A - API</p><span class="tool-tag bg-blue-500 text-white">Docker: Gatling</span></div>
+                            <div class="bg-gray-500/20 dark:bg-gray-400/30 p-3 rounded-lg text-center border-2 border-dashed border-gray-400 dark:border-gray-500 flex items-center justify-center transform hover:scale-105 transition-transform duration-200"><p class="font-semibold text-gray-800 dark:text-gray-300 text-sm">Kolejne Pody...</p></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <hr class="my-16 border-gray-200 dark:border-gray-700">
+
+        <section id="proces_orkiestracji" class="space-y-6 scroll-mt-24 animated-section">
+            <h2 class="!text-3xl !font-semibold border-b-2 border-orange-500 pb-2">5. Szczegółowy Proces Orkiestracji Testów</h2>
+
+            <h3 class="!text-2xl">5.1. Wizualizacja Procesu na Przykładzie Zespołu Mariusza</h3>
+            <p>Poniższy diagram ilustruje, jak piramida testów konkretnego zespołu wpisuje się w zautomatyzowany proces orkiestracji, od wywołania polecenia do uzyskania artefaktów.</p>
+            <div class="not-prose my-12">
+                <div class="w-full flex flex-col items-center p-8 bg-gray-100 dark:bg-gray-800 rounded-xl shadow-lg">
+                    <h4 class="text-2xl font-semibold text-center text-sky-500 dark:text-sky-400 mb-8">Przykład: Proces Orkiestracji dla Zespołu Mariusza</h4>
+                    <div class="w-full grid grid-cols-1 lg:grid-cols-5 gap-6 items-center">
+                        <div class="pyramid-container lg:col-span-1 flex justify-center">
+                            <div class="w-full max-w-xs flex flex-col items-center p-4 bg-sky-900/50 rounded-lg">
+                                <div class="pyramid-layer bg-sky-600 w-full rounded-t-lg"><div><p class="text-sm">Funkcjonalne</p><span class="tool-tag text-xs">Cypress</span></div></div>
+                                <div class="pyramid-layer bg-sky-500 w-2/3"><div><p class="text-sm">Wydajnościowe</p><span class="tool-tag text-xs">Gatling-ts</span></div></div>
+                                <div class="pyramid-layer bg-sky-400 w-1/3 rounded-b-lg"><div><p class="text-sm">Jednost.</p><span class="tool-tag text-xs opacity-70">Brak</span></div></div>
+                            </div>
+                        </div>
+                        <div class="flow-arrow hidden lg:flex"><svg xmlns="http://www.w3.org/2000/svg" class="h-10 w-10" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 8l4 4m0 0l-4 4m4-4H3" /></svg></div>
+                        <div class="flow-arrow flex lg:hidden rotate-90"><svg xmlns="http://www.w3.org/2000/svg" class="h-10 w-10" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 8l4 4m0 0l-4 4m4-4H3" /></svg></div>
+                        <div class="lg:col-span-3">
+                            <div class="bg-gray-200 dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-lg p-6">
+                                <p class="text-center text-sm font-semibold text-gray-700 dark:text-gray-300 mb-4">1. Polecenie uruchomienia</p>
+                                <div class="p-2 bg-gray-900 dark:bg-black rounded-md text-left"><code class="text-sm text-gray-300">$ ing test mariusz-suite --all</code></div>
+                                <div class="flow-arrow rotate-90 my-4"><svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" /></svg></div>
+                                <div class="bg-gray-300 dark:bg-gray-800 p-4 rounded-lg">
+                                    <p class="text-center text-sm font-semibold text-gray-700 dark:text-gray-300 mb-4">2. Test Orchestrator w K8s tworzy 2 zadania (Jobs)</p>
+                                    <div class="flex flex-col md:flex-row gap-4">
+                                        <div class="flex-1 bg-sky-500/20 dark:bg-sky-500/30 p-3 rounded-lg text-center"><p class="font-semibold text-sky-800 dark:text-sky-300 text-sm leading-tight">Job 1: Uruchomienie Poda z testami funkcjonalnymi</p><span class="tool-tag bg-sky-500 text-white">Docker: cypress:latest</span></div>
+                                        <div class="flex-1 bg-sky-500/20 dark:bg-sky-500/30 p-3 rounded-lg text-center"><p class="font-semibold text-sky-800 dark:text-sky-300 text-sm leading-tight">Job 2: Uruchomienie Poda z testami wydajnościowymi</p><span class="tool-tag bg-sky-500 text-white">Docker: gatling-ts:latest</span></div>
+                                    </div>
+                                    <div class="flow-arrow rotate-90 my-4"><svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" /></svg></div>
+                                    <p class="text-center text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">3. Pody wysyłają artefakty do Storage</p>
+                                    <div class="text-center text-xs text-gray-600 dark:text-gray-400">(Raporty HTML, filmy .mp4, zrzuty .png, logi .txt)</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </div>
+    <br><br>
+    <h3>5.2. Wizualizacja Cyklu Życia Testu (End-to-End)</h3>
+
+    <p>Poniższa animacja ilustruje pełny, zautomatyzowany przepływ pracy - od napisania kodu przez dewelopera, aż po wizualizację wyników. Proces jest demonstrowany przez sekwencyjne podświetlanie kolejnych etapów infrastruktury wraz z opisem wykonywanej akcji.</p>
+    <div class="not-prose my-12">
+        <div id="e2e-container" class="relative bg-gray-100 dark:bg-gray-800 p-8 rounded-xl shadow-lg space-y-4">
+            <button id="run-animation-btn" class="absolute top-4 right-4 bg-orange-500 hover:bg-orange-600 text-white font-bold py-2 px-4 rounded-lg transition-colors z-20">Uruchom animację</button>
+            <div id="tooltip-container"></div>
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div id="station-1" class="workflow-station bg-white dark:bg-gray-700 p-4 rounded-lg text-center h-40 flex flex-col justify-center items-center"><svg xmlns="http://www.w3.org/2000/svg" class="h-10 w-10 mb-2 text-orange-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg><h5 class="font-semibold text-gray-800 dark:text-white">1. Developer & Git</h5><p class="text-xs text-gray-500 dark:text-gray-400">git push</p></div>
+                <div id="station-2" class="workflow-station bg-white dark:bg-gray-700 p-4 rounded-lg text-center h-40 flex flex-col justify-center items-center"><svg xmlns="http://www.w3.org/2000/svg" class="h-10 w-10 mb-2 text-orange-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 10h.01M15 10h.01M9 14h.01M15 14h.01" /></svg><h5 class="font-semibold text-gray-800 dark:text-white">2. CI/CD Pipeline</h5><p class="text-xs text-gray-500 dark:text-gray-400">Budowanie obrazu</p></div>
+                <div id="station-3" class="workflow-station bg-white dark:bg-gray-700 p-4 rounded-lg text-center h-40 flex flex-col justify-center items-center"><svg xmlns="http://www.w3.org/2000/svg" class="h-10 w-10 mb-2 text-orange-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" /></svg><h5 class="font-semibold text-gray-800 dark:text-white">3. Container Registry</h5><p class="text-xs text-gray-500 dark:text-gray-400">docker push</p></div>
+                <div id="station-4" class="workflow-station bg-white dark:bg-gray-700 p-4 rounded-lg text-center h-40 flex flex-col justify-center items-center"><svg xmlns="http://www.w3.org/2000/svg" class="h-10 w-10 mb-2 text-orange-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.42 20.42a2 2 0 0 0 2.83-2.83L12 6.17l-1.42-1.42a2 2 0 0 0-2.83 0L6.17 6.17 3.58 3.58a2 2 0 0 0-2.83 2.83L6.17 12l-1.42 1.42a2 2 0 0 0 0 2.83l1.42 1.42L12 21.83l1.42-1.42a2 2 0 0 0 0-2.83l-1.42-1.42Z"/></svg><h5 class="font-semibold text-gray-800 dark:text-white">4. Kubernetes</h5><p class="text-xs text-gray-500 dark:text-gray-400">Uruchomienie poda</p></div>
+                <div id="station-5" class="workflow-station bg-white dark:bg-gray-700 p-4 rounded-lg text-center h-40 flex flex-col justify-center items-center md:col-start-2"><svg xmlns="http://www.w3.org/2000/svg" class="h-10 w-10 mb-2 text-orange-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" /></svg><h5 class="font-semibold text-gray-800 dark:text-white">5. Test Execution</h5><p class="text-xs text-gray-500 dark:text-gray-400">Testy w podzie</p></div>
+                <div id="station-6" class="workflow-station bg-white dark:bg-gray-700 p-4 rounded-lg text-center h-40 flex flex-col justify-center items-center"><svg xmlns="http://www.w3.org/2000/svg" class="h-10 w-10 mb-2 text-orange-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" /></svg><h5 class="font-semibold text-gray-800 dark:text-white">6. Artefakty do Storage</h5><p class="text-xs text-gray-500 dark:text-gray-400">Zapis wyników</p></div>
+                <div id="station-7" class="workflow-station bg-white dark:bg-gray-700 p-4 rounded-lg text-center h-40 flex flex-col justify-center items-center col-start-1 md:col-start-4"><svg xmlns="http://www.w3.org/2000/svg" class="h-10 w-10 mb-2 text-orange-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg><h5 class="font-semibold text-gray-800 dark:text-white">7. Portal z Raportami</h5><p class="text-xs text-gray-500 dark:text-gray-400">Wizualizacja wyników</p></div>
+            </div>
+        </div>
+    </div>
+
+
+
+    <hr class="my-16 border-gray-200 dark:border-gray-700">
+
+    <section id="implementacja" class="space-y-6 scroll-mt-24 animated-section">
+        <h2 class="!text-3xl !font-semibold border-b-2 border-orange-500 pb-2">6. Implementacja: Wymagania i Wyzwania</h2>
+        <h3>6.1. Wymagania Technologiczne</h3>
+        <ul>
+            <li><strong>Klaster Kubernetes:</strong> Dostęp i konfiguracja klastra (np. AKS) z odpowiednimi uprawnieniami.</li>
+            <li><strong>Rejestr Kontenerów:</strong> Skonfigurowany Azure Container Registry (ACR) do przechowywania obrazów Docker.</li>
+            <li><strong>Storage:</strong> Utworzenie konta Azure Blob Storage na artefakty.</li>
+            <li><strong>Narzędzia CI/CD:</strong> Zaawansowana konfiguracja Azure DevOps Pipelines do budowania i publikowania obrazów oraz wywoływania testów.</li>
+            <li><strong>Narzędzie CLI:</strong> Stworzenie i dystrybucja własnego narzędzia CLI.</li>
+            <li><strong>Portal z Raportami:</strong> Wdrożenie i konfiguracja aplikacji do raportowania.</li>
+        </ul>
+        <h3>6.2. Wymagane Kompetencje i Rozwój Zespołów</h3>
+        <ul>
+            <li><strong>Docker:</strong> Wszyscy testerzy i deweloperzy muszą posiadać podstawową wiedzę na temat konteneryzacji i tworzenia plików Dockerfile.</li>
+            <li><strong>Kubernetes:</strong> Wymagana jest grupa specjalistów (np. Platform/DevOps Team) odpowiedzialna za utrzymanie i rozwój klastra.</li>
+            <li><strong>Kultura Jakości:</strong> Przesunięcie odpowiedzialności za jakość w lewo ("shift-left"). Konieczne będzie promowanie i egzekwowanie pisania testów jednostkowych przez deweloperów.</li>
+        </ul>
+        <h3>6.3. Potencjalne Wyzwania i Ryzyka</h3>
+        <ul>
+            <li><strong>Krzywa uczenia się:</strong> Adaptacja do nowych narzędzi (Docker, K8s) może zająć czas.</li>
+            <li><strong>Złożoność początkowa:</strong> Skonfigurowanie całej platformy od zera jest złożonym zadaniem inżynierskim.</li>
+            <li><strong>Opór przed zmianą:</strong> Konieczność przekonania zespołów do zmiany sprawdzonych, choć nieefektywnych, nawyków.</li>
+            <li><strong>Koszty:</strong> Chociaż docelowo platforma ma optymalizować koszty, jej budowa i utrzymanie generują początkowe wydatki (np. koszt klastra).</li>
+        </ul>
+        <h3>6.4. Proponowany Harmonogram Działań (Roadmapa)</h3>
+        <dl class="space-y-4">
+            <div><dt class="font-semibold">Q3 2025:</dt><dd class="pl-4">Sfinalizowanie zbierania informacji ze wszystkich zespołów. Powołanie zespołu odpowiedzialnego za budowę platformy (Proof of Concept). Rozpoczęcie prac nad PoC: konteneryzacja testów jednego zespołu.</dd></div>
+            <div><dt class="font-semibold">Q4 2025:</dt><dd class="pl-4">Prezentacja działającego PoC. Decyzja o pełnym wdrożeniu. Rozpoczęcie cyklu szkoleń z Dockera dla zespołów.</dd></div>
+            <div><dt class="font-semibold">Q1 2026:</dt><dd class="pl-4">Wdrożenie produkcyjnej wersji platformy. Migracja pierwszych 2-3 zespołów na nowe rozwiązanie.</dd></div>
+            <div><dt class="font-semibold">Q2 2026 i dalej:</dt><dd class="pl-4">Stopniowa migracja kolejnych zespołów. Ciągły rozwój platformy i dodawanie nowych funkcjonalności.</dd></div>
+        </dl>
+    </section>
+
+    <hr class="my-16 border-gray-200 dark:border-gray-700">
+
+    <section id="slownik" class="space-y-6 scroll-mt-24 animated-section">
+        <h2 class="!text-3xl !font-semibold border-b-2 border-orange-500 pb-2">7. Słownik Pojęć</h2>
+        <dl class="space-y-4">
+            <div><dt class="font-semibold">Docker:</dt><dd class="pl-4">Platforma do tworzenia, wdrażania i uruchamiania aplikacji w kontenerach.</dd></div>
+            <div><dt class="font-semibold">Kontener:</dt><dd class="pl-4">Lekka, samodzielna, wykonywalna paczka oprogramowania, która zawiera wszystko, co jest potrzebne do jej uruchomienia.</dd></div>
+            <div><dt class="font-semibold">Kubernetes (K8s):</dt><dd class="pl-4">Otwartoźródłowa platforma do automatyzacji wdrażania, skalowania i zarządzania skonteneryzowanymi aplikacjami.</dd></div>
+            <div><dt class="font-semibold">Pod:</dt><dd class="pl-4">Najmniejsza, wdrażalna jednostka obliczeniowa w Kubernetesie. Może zawierać jeden lub więcej kontenerów.</dd></div>
+            <div><dt class="font-semibold">Job (Zadanie):</dt><dd class="pl-4">Zasób Kubernetesa, który tworzy jeden lub więcej Podów i zapewnia, że określona liczba z nich pomyślnie się zakończy. Idealny do uruchamiania zadań wsadowych, takich jak testy.</dd></div>
+            <div><dt class="font-semibold">CLI (Command-Line Interface):</dt><dd class="pl-4">Interfejs wiersza poleceń.</dd></div>
+            <div><dt class="font-semibold">Artefakty:</dt><dd class="pl-4">Pliki wynikowe generowane podczas procesu budowania lub testowania (np. raporty, logi).</dd></div>
+        </dl>
+    </section>
+
+    <hr class="my-16 border-gray-200 dark:border-gray-700">
+
+    <section id="zalaczniki" class="space-y-6 scroll-mt-24 animated-section">
+        <h2 class="!text-3xl !font-semibold border-b-2 border-orange-500 pb-2">8. Załączniki</h2>
+        <ul>
+            <li>8.1. [Link do dokumentacji narzędzia `ing-test` (do utworzenia)]</li>
+            <li>8.2. [Link do portalu z raportami (do wdrożenia)]</li>
+            <li>8.3. [Link do repozytorium z przykładami Dockerfile dla testów (do utworzenia)]</li>
+        </ul>
+    </section>
+
+</main>
+<script>
+    document.addEventListener('DOMContentLoaded', () => {
+        const intersectionObserver = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    entry.target.classList.add('in-view');
+                }
+            });
+        }, { threshold: 0.1 });
+
+        document.querySelectorAll('.animated-section, .pyramid-container').forEach(el => {
+            intersectionObserver.observe(el);
+        });
+
+        const e2eContainer = document.getElementById('e2e-container');
+        if (!e2eContainer) return;
+
+        const animationButton = document.getElementById('run-animation-btn');
+        if (animationButton) {
+             const stations = [
+                { el: document.getElementById('station-1'), text: 'Deweloper wysyła kod do repozytorium Azure' },
+                { el: document.getElementById('station-2'), text: 'Azure Pipelines automatycznie buduje obraz Docker' },
+                { el: document.getElementById('station-3'), text: 'Nowy obraz jest umieszczany w Rejestrze Kontenerów' },
+                { el: document.getElementById('station-4'), text: 'Test jest wywoływany przez CLI lub automatycznie' },
+                { el: document.getElementById('station-5'), text: 'Kubernetes uruchamia testy w nowym, izolowanym podzie' },
+                { el: document.getElementById('station-6'), text: 'Wyniki i raporty są zapisywane w Azure Blob Storage' },
+                { el: document.getElementById('station-7'), text: 'Portal z raportami wizualizuje wyniki testów' }
+            ];
+
+            let tooltip = document.createElement('div');
+            tooltip.className = 'tooltip';
+            document.getElementById('tooltip-container').appendChild(tooltip);
+
+            let currentStationIndex = -1;
+            let animationInterval;
+
+            function runAnimation() {
+                clearInterval(animationInterval);
+                animationButton.disabled = true;
+                currentStationIndex = -1;
+                stations.forEach(s => s.el.classList.remove('active'));
+                tooltip.classList.remove('visible');
+
+                // Start immediately
+                setTimeout(nextStep, 100);
+            }
+
+            function nextStep() {
+                currentStationIndex++;
+                if (currentStationIndex >= stations.length) {
+                    clearInterval(animationInterval);
+                    stations.forEach(s => s.el.classList.remove('active'));
+                    tooltip.classList.remove('visible');
+                    animationButton.disabled = false;
+                    return;
+                }
+
+                stations.forEach((s, index) => {
+                    if (index === currentStationIndex) {
+                        s.el.classList.add('active');
+                        tooltip.textContent = s.text;
+
+                        const stationRect = s.el.getBoundingClientRect();
+                        const containerRect = e2eContainer.getBoundingClientRect();
+
+                        tooltip.style.left = `${stationRect.left - containerRect.left + stationRect.width / 2 - tooltip.offsetWidth / 2}px`;
+                        tooltip.style.top = `${stationRect.top - containerRect.top - tooltip.offsetHeight - 10}px`;
+                        tooltip.classList.add('visible');
+                    } else {
+                        s.el.classList.remove('active');
+                    }
+                });
+                 animationInterval = setTimeout(nextStep, 2000);
+            }
+
+            animationButton.addEventListener('click', runAnimation);
+        }
+    });
+</script>
+</body>
+</html>
