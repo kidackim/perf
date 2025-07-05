@@ -1,58 +1,101 @@
-Na podstawie dostarczonych obrazów, które przedstawiają wyniki testów wydajnościowych Gatling dla scenariusza z profilem obciążenia wynoszącym "1000 użytkowników * 3 podczas 90 sekund" (co prawdopodobnie oznacza $3000$ użytkowników z ramp-upem lub spike'em trwającym 90 sekund), możemy sformułować następujące podsumowanie:
+Niniejszy raport przedstawia szczegółowe podsumowanie wyników testów wydajnościowych dla scenariusza digitizedCardsTokensEligibility, przeprowadzonych przy użyciu narzędzia Gatling. Test został skonfigurowany jako stress test, symulujący obciążenie narastające do około 1000 aktywnych użytkowników w ciągu 90 sekund (zgodnie z profilem 1000 * 3 during 90 seconds).
 
-**1. Profil Obciążenia (Stress Test):**
+1. Ogólne statystyki wykonania (na podstawie "Global Information" / "Response Time Ranges" i tabeli "Stats")
 
-* **Liczba aktywnych użytkowników (Active Users along the Simulation):** Wykres "Active Users along the Simulation" pokazuje, że liczba aktywnych użytkowników narastała stopniowo, osiągając szczyt w okolicach $1000$ (lub nieco więcej, ciężko precyzyjnie odczytać wartość z osi Y) między $14:55:20$ a $14:55:40$, a następnie stopniowo spadała. To potwierdza, że był to test obciążeniowy lub stress test z narastającym obciążeniem.
-* **Żądania na sekundę (Number of requests per second):** Liczba żądań na sekundę również rosła wraz z liczbą aktywnych użytkowników, osiągając szczyt w okolicach 100-120 żądań/sekundę, a następnie spadała.
-* **Odpowiedzi na sekundę (Number of responses per second):** Wykres "Number of responses per second" (pokazujący również odpowiedzi OK i KO) ma podobny kształt do wykresu żądań na sekundę, co oznacza, że system próbował odpowiadać na napływające żądania.
+Cel testu: Ocena wydajności i stabilności systemu digitizedCardsTokensEligibility pod wysokim obciążeniem.
 
-**2. Ogólne Wyniki Wykonania:**
+Całkowita liczba żądań: 3000
 
-* **Całkowita liczba żądań:** $3000$
-* **Liczba udanych żądań (OK):** $3000$
-* **Liczba nieudanych żądań (KO):** $0$
-* **Procent udanych żądań:** $100\%$ OK, $0\%$ KO.
-    * **Wniosek:** Mimo wysokiego obciążenia, system nie zwrócił żadnych błędów z perspektywy kodu odpowiedzi HTTP (wszystkie żądania zakończyły się statusem OK). Jest to pozytywny sygnał dotyczący stabilności, ale trzeba szczegółowo przeanalizować czasy odpowiedzi.
+Liczba żądań zakończonych sukcesem (OK): 3000 (100%)
 
-**3. Czasy Odpowiedzi (Response Time - kluczowy wskaźnik dla tego testu):**
+Liczba żądań zakończonych błędem (KO): 0 (0%)
 
-* **Średni czas odpowiedzi (Mean):** $8403$ ms (około $8.4$ sekundy).
-* **Minimalny czas odpowiedzi (Min):** $452$ ms.
-* **Maksymalny czas odpowiedzi (Max):** $18367$ ms (około $18.4$ sekundy).
-* **Odchylenie standardowe (Standard Deviation):** $5862$ ms.
-    * **Wniosek:** Średni czas odpowiedzi jest bardzo wysoki ($>8$ sekund), co jest nieakceptowalne dla większości aplikacji internetowych. Wysokie odchylenie standardowe wskazuje na dużą zmienność czasów odpowiedzi, co sugeruje niestabilność działania pod obciążeniem.
+Średni czas odpowiedzi (Mean Response Time): 8403 ms
 
-* **Percentyle czasu odpowiedzi:**
-    * **50. percentyl (mediana):** $8881$ ms - połowa żądań zajęła ponad $8.8$ sekundy.
-    * **75. percentyl:** $14043$ ms - $25\%$ żądań zajęło ponad $14$ sekund.
-    * **95. percentyl:** $16530$ ms - $5\%$ żądań zajęło ponad $16.5$ sekundy.
-    * **99. percentyl:** $17481$ ms - $1\%$ żądań zajęło ponad $17.4$ sekundy.
-    * **Wniosek:** Czasy odpowiedzi dla wyższych percentyli są ekstremalnie wysokie, co wskazuje, że znacząca część użytkowników doświadczała bardzo długich opóźnień.
+Minimalny czas odpowiedzi (Min Response Time): 452 ms
 
-* **Rozkład czasu odpowiedzi (Response Time Distribution):** Wykres "Response Time Distribution" oraz "Response Time Ranges" jasno pokazują, że:
-    * Znaczna większość żądań ($2250$ z $3000$) mieści się w zakresie `t >= 1200 ms` (czyli ponad $1.2$ sekundy).
-    * Niewielka część ($452$) zmieściła się w zakresie `t < 800 ms`.
-    * Bardzo mało ($298$) w zakresie `t >= 800 ms i t < 1200 ms`.
-    * Nie ma błędów oznaczonych jako "failed" (czerwone).
-    * Histogram "Response Time Distribution" pokazuje, że odpowiedzi grupują się wokół wyższych wartości, z kilkoma szczytami w okolicach $200$ ms, ale dominującą liczbą odpowiedzi rozłożoną w szerokim zakresie powyżej $3000$ ms, co potwierdza bardzo długie czasy.
+Maksymalny czas odpowiedzi (Max Response Time): 18367 ms
 
-* **Czasy odpowiedzi percentylowe w czasie (Response Time Percentiles over Time):** Wykres ten jest kluczowy. Pokazuje, że wraz ze wzrostem liczby aktywnych użytkowników (pomarańczowa linia) i liczby żądań na sekundę (niebieska linia pod spodem), czasy odpowiedzi (szczególnie $90$ i $95$ percentyl) gwałtownie wzrosły, osiągając wartości powyżej $10$ sekund (nawet do $18$ sekund dla maks.). Oznacza to, że system staje się bardzo powolny pod wysokim obciążeniem.
+Odchylenie standardowe (Standard Deviation): 5862 ms
 
-**Podsumowanie i wnioski:**
+Wnioski:
 
-* **Stabilność (brak błędów):** System jest stabilny pod względem funkcjonalnym pod wysokim obciążeniem, ponieważ nie generuje błędów HTTP (`0% KO`). To jest pozytywna cecha.
-* **Wydajność (czasy odpowiedzi):** System ma poważne problemy z wydajnością pod obciążeniem. Czasy odpowiedzi gwałtownie rosną wraz ze wzrostem liczby aktywnych użytkowników i żądań, stając się nieakceptowalnie długie (średnio ponad $8$ sekund, a dla $99$ percentyla prawie $18$ sekund).
-* **Wąskie gardła:** Istnieje jasne wskazanie na wąskie gardło wydajnościowe, które powoduje, że system nie jest w stanie przetwarzać żądań wystarczająco szybko, gdy obciążenie wzrasta. Może to być związane z:
-    * Niewystarczającymi zasobami serwera (CPU, pamięć, sieć).
-    * Problemami z bazą danych (blokady, wolne zapytania, zbyt mała pula połączeń).
-    * Inefektywnym kodem aplikacji (problemy z algorytmami, synchronizacją, I/O).
-    * Wąskimi gardłami w usługach zewnętrznych, od których zależy aplikacja.
+System zachował pełną stabilność funkcjonalną, przetwarzając 100% żądań bez zwracania błędów HTTP.
 
-**Kolejne kroki:**
+Czasy odpowiedzi są skrajnie wysokie i nieakceptowalne dla większości użytkowników. Średni czas odpowiedzi wynosi ponad 8 sekund, a maksymalny czas osiąga prawie 18.5 sekundy. Wysokie odchylenie standardowe wskazuje na dużą zmienność czasów odpowiedzi.
 
-1.  **Analiza zasobów:** Sprawdź zużycie zasobów (CPU, RAM, dysk I/O, sieć) na serwerach aplikacji i baz danych w trakcie testu.
-2.  **Analiza logów:** Przejrzyj logi aplikacji i serwera pod kątem błędów, ostrzeżeń lub wzorców, które mogą wskazywać na problemy wydajnościowe.
-3.  **Profilowanie aplikacji:** Użyj narzędzi do profilowania kodu aplikacji, aby zidentyfikować najbardziej czasochłonne metody lub operacje.
-4.  **Optymalizacja bazy danych:** Sprawdź wydajność zapytań SQL, indeksy, konfigurację pul połączeń.
-5.  **Stopniowe testowanie:** Jeśli to możliwe, wykonaj testy z mniejszymi, stopniowo rosnącymi obciążeniami, aby precyzyjnie zlokalizować punkt, w którym system zaczyna zwalniać.
-6.  **Ulepszenia infrastruktury/kodu:** Po zidentyfikowaniu wąskich gardeł, wdróż optymalizacje (np. zwiększenie zasobów, optymalizacja kodu, poprawa konfiguracji bazy danych) i powtórz testy.
+2. Percentyle Czasu Odpowiedzi (na podstawie tabeli "Stats")
+
+50. percentyl (mediana): 8881 ms (50% żądań zajęło mniej niż 8.881 s)
+
+75. percentyl: 14043 ms (75% żądań zajęło mniej niż 14.043 s)
+
+95. percentyl: 16530 ms (95% żądań zajęło mniej niż 16.530 s)
+
+99. percentyl: 17481 ms (99% żądań zajęło mniej niż 17.481 s)
+
+Wnioski:
+
+Dane percentylowe jasno pokazują, że znakomita większość żądań (zwłaszcza powyżej 50. percentyla) doświadczyła ekstremalnie długich opóźnień. Jest to kluczowy wskaźnik wskazujący na poważne problemy z wydajnością pod obciążeniem.
+
+3. Rozkład Czasów Odpowiedzi (na podstawie "Response Time Ranges" i "Response Time Distribution")
+
+Żądania < 800 ms: 452 (15%)
+
+Żądania >= 800 ms i < 1200 ms: 298 (10%)
+
+Żądania >= 1200 ms: 2250 (75%)
+
+Wnioski:
+
+Trzy czwarte wszystkich żądań (75%) miało czas odpowiedzi przekraczający 1.2 sekundy.
+
+Szczegółowy histogram "Response Time Distribution" wizualizuje, że większość odpowiedzi grupuje się w zakresach z bardzo wysokimi wartościami, potwierdzając powolne działanie systemu w warunkach stresu.
+
+4. Aktywni Użytkownicy w Czasie ("Active Users along the Simulation")
+
+Obserwacja: Liczba aktywnych użytkowników narastała stopniowo od około 14:54:35, osiągając szczyt około 1000 użytkowników w przedziale 14:55:15 - 14:55:30, a następnie stopniowo spadała.
+
+Wnioski:
+
+Profil obciążenia został poprawnie zaimplementowany, symulując stopniowy wzrost i spadek ruchu.
+
+System był poddawany znaczącemu obciążeniu, które ujawniło jego granice wydajności.
+
+5. Liczba Żądań na Sekundę ("Number of requests per second")
+
+Obserwacja: Liczba żądań na sekundę rosła równolegle z liczbą aktywnych użytkowników, osiągając szczyt około 120 żądań/sekundę w okolicach 14:55:15 - 14:55:30.
+
+Wnioski:
+
+System był w stanie przyjąć wzrostową liczbę żądań aż do szczytowej przepustowości 120 req/s. Brak błędów wskazuje, że nie odrzucał żądań na poziomie protokołu HTTP.
+
+6. Liczba Odpowiedzi na Sekundę ("Number of responses per second")
+
+Obserwacja: Liczba odpowiedzi OK (zielony obszar) jest niemal identyczna z liczbą żądań na sekundę, osiągając szczyt około 120 odpowiedzi/sekundę. Brak widocznych odpowiedzi KO (czerwony obszar).
+
+Wnioski:
+
+Potwierdzenie 0% błędów funkcjonalnych. System odpowiadał na wszystkie żądania, ale niekoniecznie w akceptowalnym czasie, co jest kluczowym problemem.
+
+7. Percentyle Czasu Odpowiedzi w Czasie ("Response Time Percentiles over Time (OK)")
+
+Obserwacja: Na początku testu (niskie obciążenie) czasy odpowiedzi percentylowe były niskie. Wraz ze wzrostem liczby aktywnych użytkowników (od około 14:54:50), wszystkie percentyle (szczególnie 90%, 95%, 99%) gwałtownie wzrosły, osiągając wartości znacznie powyżej 10 sekund (aż do około 18 sekund dla maks./99% w szczycie). Czasy odpowiedzi utrzymywały się na wysokim poziomie nawet po spadku obciążenia.
+
+Wnioski:
+
+Wykres ten jednoznacznie pokazuje, że system ma poważne problemy ze skalowalnością wydajnościową. Czasy odpowiedzi dramatycznie pogarszają się wraz ze wzrostem obciążenia.
+
+Istnieje wyraźne wąskie gardło, które aktywuje się przy wzroście obciążenia, powodując znaczące spowolnienia. Zauważalna jest również potencjalna "długotrwała" konsekwencja przeciążenia (long-term effect), gdzie system nie odzyskuje szybko pełnej wydajności po spadku ruchu.
+
+Rekomendacje (do dalszych działań):
+
+Przeprowadzić szczegółową analizę metryk zużycia zasobów (CPU, RAM, I/O dysku, sieć) na serwerach aplikacji, baz danych oraz wszelkich zależności zewnętrznych podczas testu.
+
+Przeanalizować logi aplikacji i serwerów w celu zidentyfikowania wyjątków, ostrzeżeń lub wzorców, które mogą wskazywać na przyczyny spowolnień.
+
+Rozważyć profilowanie kodu aplikacji w celu zlokalizowania najbardziej czasochłonnych metod i operacji.
+
+Dokonać przeglądu konfiguracji bazy danych oraz zoptymalizować zapytania SQL, które mogą być źródłem wąskich gardeł.
+
+Przeprowadzić iteracyjne testy z mniejszymi, stopniowo rosnącymi obciążeniami, aby precyzyjnie zlokalizować punkt, w którym system zaczyna degradować swoją wydajność.
