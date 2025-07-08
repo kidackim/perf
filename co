@@ -1,101 +1,29 @@
-Niniejszy raport przedstawia szczegółowe podsumowanie wyników testów wydajnościowych dla scenariusza digitizedCardsTokensEligibility, przeprowadzonych przy użyciu narzędzia Gatling. Test został skonfigurowany jako stress test, symulujący obciążenie narastające do około 1000 aktywnych użytkowników w ciągu 90 sekund (zgodnie z profilem 1000 * 3 during 90 seconds).
+# Zdefiniuj zmienne, aby łatwiej zarządzać nazwami
+variables:
+  imageName: 'p08399-test-performance-hce'
+  tag: '$(Build.BuildId)'
 
-1. Ogólne statystyki wykonania (na podstawie "Global Information" / "Response Time Ranges" i tabeli "Stats")
+stages:
+- stage: BuildAndTest
+  displayName: 'Build and Run Tests'
+  jobs:
+  - job: Test
+    displayName: 'Build and Test Job'
+    pool:
+      vmImage: 'ubuntu-latest'
+    steps:
+    # Krok 1: Budowanie obrazu Docker
+    # Ten krok pozostaje taki sam, buduje obraz na podstawie Twojego Dockerfile.
+    - task: Docker@2
+      displayName: 'Build an image'
+      inputs:
+        command: 'build'
+        dockerfile: '$(Build.SourcesDirectory)/Dockerfile'
+        # Tagujemy obraz, używając zdefiniowanych zmiennych
+        tags: '$(imageName):$(tag)'
 
-Cel testu: Ocena wydajności i stabilności systemu digitizedCardsTokensEligibility pod wysokim obciążeniem.
-
-Całkowita liczba żądań: 3000
-
-Liczba żądań zakończonych sukcesem (OK): 3000 (100%)
-
-Liczba żądań zakończonych błędem (KO): 0 (0%)
-
-Średni czas odpowiedzi (Mean Response Time): 8403 ms
-
-Minimalny czas odpowiedzi (Min Response Time): 452 ms
-
-Maksymalny czas odpowiedzi (Max Response Time): 18367 ms
-
-Odchylenie standardowe (Standard Deviation): 5862 ms
-
-Wnioski:
-
-System zachował pełną stabilność funkcjonalną, przetwarzając 100% żądań bez zwracania błędów HTTP.
-
-Czasy odpowiedzi są skrajnie wysokie i nieakceptowalne dla większości użytkowników. Średni czas odpowiedzi wynosi ponad 8 sekund, a maksymalny czas osiąga prawie 18.5 sekundy. Wysokie odchylenie standardowe wskazuje na dużą zmienność czasów odpowiedzi.
-
-2. Percentyle Czasu Odpowiedzi (na podstawie tabeli "Stats")
-
-50. percentyl (mediana): 8881 ms (50% żądań zajęło mniej niż 8.881 s)
-
-75. percentyl: 14043 ms (75% żądań zajęło mniej niż 14.043 s)
-
-95. percentyl: 16530 ms (95% żądań zajęło mniej niż 16.530 s)
-
-99. percentyl: 17481 ms (99% żądań zajęło mniej niż 17.481 s)
-
-Wnioski:
-
-Dane percentylowe jasno pokazują, że znakomita większość żądań (zwłaszcza powyżej 50. percentyla) doświadczyła ekstremalnie długich opóźnień. Jest to kluczowy wskaźnik wskazujący na poważne problemy z wydajnością pod obciążeniem.
-
-3. Rozkład Czasów Odpowiedzi (na podstawie "Response Time Ranges" i "Response Time Distribution")
-
-Żądania < 800 ms: 452 (15%)
-
-Żądania >= 800 ms i < 1200 ms: 298 (10%)
-
-Żądania >= 1200 ms: 2250 (75%)
-
-Wnioski:
-
-Trzy czwarte wszystkich żądań (75%) miało czas odpowiedzi przekraczający 1.2 sekundy.
-
-Szczegółowy histogram "Response Time Distribution" wizualizuje, że większość odpowiedzi grupuje się w zakresach z bardzo wysokimi wartościami, potwierdzając powolne działanie systemu w warunkach stresu.
-
-4. Aktywni Użytkownicy w Czasie ("Active Users along the Simulation")
-
-Obserwacja: Liczba aktywnych użytkowników narastała stopniowo od około 14:54:35, osiągając szczyt około 1000 użytkowników w przedziale 14:55:15 - 14:55:30, a następnie stopniowo spadała.
-
-Wnioski:
-
-Profil obciążenia został poprawnie zaimplementowany, symulując stopniowy wzrost i spadek ruchu.
-
-System był poddawany znaczącemu obciążeniu, które ujawniło jego granice wydajności.
-
-5. Liczba Żądań na Sekundę ("Number of requests per second")
-
-Obserwacja: Liczba żądań na sekundę rosła równolegle z liczbą aktywnych użytkowników, osiągając szczyt około 120 żądań/sekundę w okolicach 14:55:15 - 14:55:30.
-
-Wnioski:
-
-System był w stanie przyjąć wzrostową liczbę żądań aż do szczytowej przepustowości 120 req/s. Brak błędów wskazuje, że nie odrzucał żądań na poziomie protokołu HTTP.
-
-6. Liczba Odpowiedzi na Sekundę ("Number of responses per second")
-
-Obserwacja: Liczba odpowiedzi OK (zielony obszar) jest niemal identyczna z liczbą żądań na sekundę, osiągając szczyt około 120 odpowiedzi/sekundę. Brak widocznych odpowiedzi KO (czerwony obszar).
-
-Wnioski:
-
-Potwierdzenie 0% błędów funkcjonalnych. System odpowiadał na wszystkie żądania, ale niekoniecznie w akceptowalnym czasie, co jest kluczowym problemem.
-
-7. Percentyle Czasu Odpowiedzi w Czasie ("Response Time Percentiles over Time (OK)")
-
-Obserwacja: Na początku testu (niskie obciążenie) czasy odpowiedzi percentylowe były niskie. Wraz ze wzrostem liczby aktywnych użytkowników (od około 14:54:50), wszystkie percentyle (szczególnie 90%, 95%, 99%) gwałtownie wzrosły, osiągając wartości znacznie powyżej 10 sekund (aż do około 18 sekund dla maks./99% w szczycie). Czasy odpowiedzi utrzymywały się na wysokim poziomie nawet po spadku obciążenia.
-
-Wnioski:
-
-Wykres ten jednoznacznie pokazuje, że system ma poważne problemy ze skalowalnością wydajnościową. Czasy odpowiedzi dramatycznie pogarszają się wraz ze wzrostem obciążenia.
-
-Istnieje wyraźne wąskie gardło, które aktywuje się przy wzroście obciążenia, powodując znaczące spowolnienia. Zauważalna jest również potencjalna "długotrwała" konsekwencja przeciążenia (long-term effect), gdzie system nie odzyskuje szybko pełnej wydajności po spadku ruchu.
-
-Rekomendacje (do dalszych działań):
-
-Przeprowadzić szczegółową analizę metryk zużycia zasobów (CPU, RAM, I/O dysku, sieć) na serwerach aplikacji, baz danych oraz wszelkich zależności zewnętrznych podczas testu.
-
-Przeanalizować logi aplikacji i serwerów w celu zidentyfikowania wyjątków, ostrzeżeń lub wzorców, które mogą wskazywać na przyczyny spowolnień.
-
-Rozważyć profilowanie kodu aplikacji w celu zlokalizowania najbardziej czasochłonnych metod i operacji.
-
-Dokonać przeglądu konfiguracji bazy danych oraz zoptymalizować zapytania SQL, które mogą być źródłem wąskich gardeł.
-
-Przeprowadzić iteracyjne testy z mniejszymi, stopniowo rosnącymi obciążeniami, aby precyzyjnie zlokalizować punkt, w którym system zaczyna degradować swoją wydajność.
+    # Krok 2: Uruchomienie testów wewnątrz kontenera
+    # Ten nowy krok wykonuje 'docker run' na obrazie zbudowanym w poprzednim kroku.
+    - script: |
+        docker run --rm $(imageName):$(tag)
+      displayName: 'Run tests in container'
