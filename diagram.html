@@ -2,77 +2,61 @@
 <html lang="pl">
 <head>
     <meta charset="UTF-8">
-    <title>Diagram Procesu Wdrożeniowego</title>
+    <title>Ulepszony Diagram Procesu Wdrożeniowego</title>
 </head>
 <body>
-<div style="display: flex; flex-wrap: wrap; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; gap: 24px; background-color: #f7f8fa; padding: 20px; border-radius: 12px; border: 1px solid #e1e4e8;">
+<div style="font-family: 'Segoe UI', 'Roboto', Arial, sans-serif; background-color: #f9fafb; padding: 25px; border-radius: 12px; border: 1px solid #e5e7eb;">
 
-    <div style="width: 100%; text-align: center; margin-bottom: 20px; font-size: 13px; color: #586069;">
-        <span style="display: inline-block; padding: 6px 12px; background-color: #fffbdd; border: 1px solid #f1e05a; border-radius: 20px; margin: 5px;">👤 Krok Manualny / Zgoda</span>
-        <span style="display: inline-block; padding: 6px 12px; background-color: #f1f8ff; border: 1px solid #c8e1ff; border-radius: 20px; margin: 5px;">⚙️ Krok Zautomatyzowany</span>
-        <span style="display: inline-block; padding: 6px 12px; background-color: #e6ffed; border: 1px solid #a4d3a2; border-radius: 20px; margin: 5px;">🚀 Wdrożenie na Produkcję</span>
-    </div>
-
-    <div style="flex: 1; min-width: 320px; display: flex; flex-direction: column; align-items: center;">
-        <h3 style="margin: 0 0 20px 0; font-size: 18px; color: #24292e; font-weight: 600;">7.1 Obecny Proces (Manualne Przekazania)</h3>
-
-        <div style="width: 95%; padding: 15px; margin-bottom: 15px; background-color: #fffbdd; border-radius: 8px; text-align: center; box-shadow: 0 2px 5px rgba(0,0,0,0.05);">
-            <strong style="color: #333;">👤 Deweloper:</strong><br>Dostarcza kod i uruchamia Checkmarx
-        </div>
-
-        <div style="font-size: 24px; color: #d1d5da; margin-bottom: 15px;">↓</div>
-
-        <div style="width: 95%; padding: 15px; margin-bottom: 15px; background-color: #fffbdd; border-radius: 8px; text-align: center; box-shadow: 0 2px 5px rgba(0,0,0,0.05);">
-            <strong style="color: #333;">👤 Tester:</strong><br>Tworzy Plan Testów i wykonuje testy
-        </div>
-
-        <div style="font-size: 24px; color: #d1d5da; margin-bottom: 15px;">↓</div>
-
-        <div style="width: 95%; padding: 15px; margin-bottom: 15px; background-color: #fffbdd; border-radius: 8px; text-align: center; box-shadow: 0 2px 5px rgba(0,0,0,0.05);">
-            <strong style="color: #333;">👤 Product Owner:</strong><br>Manualna akceptacja
-        </div>
-
-        <div style="font-size: 24px; color: #d1d5da; margin-bottom: 15px;">↓</div>
-
-        <div style="width: 95%; padding: 15px; margin-bottom: 15px; background-color: #fffbdd; border-radius: 8px; text-align: center; box-shadow: 0 2px 5px rgba(0,0,0,0.05);">
-            <strong style="color: #333;">👤 ITAL:</strong><br>Ręczne tworzenie CHG
-        </div>
-
-        <div style="font-size: 24px; color: #d1d5da; margin-bottom: 15px;">↓</div>
-
-        <div style="width: 95%; padding: 15px; margin-bottom: 15px; background-color: #e6ffed; border-radius: 8px; text-align: center; box-shadow: 0 2px 5px rgba(0,0,0,0.05);">
-            <strong>🚀 Instalacja na Produkcji</strong>
+    <div style="text-align: center; margin-bottom: 25px;">
+        <h2 style="font-size: 22px; color: #1f2937; margin-bottom: 15px; font-weight: 600;">Ewolucja Procesu Wdrożeniowego</h2>
+        <div style="display: flex; justify-content: center; flex-wrap: wrap; gap: 15px; font-size: 13px; color: #4b5563;">
+            <span><span style="color: #f59e0b; font-size: 18px; vertical-align: middle;">●</span> Krok Manualny</span>
+            <span><span style="color: #3b82f6; font-size: 18px; vertical-align: middle;">●</span> Krok Zautomatyzowany</span>
+            <span><span style="color: #22c55e; font-size: 18px; vertical-align: middle;">●</span> Wdrożenie na Produkcję</span>
         </div>
     </div>
 
-    <div style="flex: 1; min-width: 320px; display: flex; flex-direction: column; align-items: center;">
-        <h3 style="margin: 0 0 20px 0; font-size: 18px; color: #24292e; font-weight: 600;">7.2 Docelowy Proces (Zautomatyzowany Pipeline)</h3>
+    <div style="display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 20px;">
 
-        <div style="width: 95%; padding: 15px; margin-bottom: 15px; background-color: #f6f8fa; border: 1px solid #e1e4e8; border-radius: 8px; text-align: center; box-shadow: 0 2px 5px rgba(0,0,0,0.05);">
-            <strong style="color: #333;">👤 Programista:</strong><br>Uruchamia potok jednym poleceniem
+        <div style="flex: 1; min-width: 300px; max-width: 400px;">
+            <h3 style="font-size: 18px; color: #be123c; text-align: center; margin-bottom: 15px;">7.1 Obecny Proces</h3>
+            <div style="background-color: #ffffff; padding: 20px; border-radius: 10px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); border: 1px solid #e5e7eb;">
+                <p style="margin: 0 0 12px 0;"><strong style="color: #f59e0b;">[M]</strong> 👤 **Deweloper:** Przygotowuje kod, uruchamia Checkmarx.</p>
+                <p style="text-align: center; color: #9ca3af; font-size: 18px; margin: 5px 0;">↓</p>
+                <p style="margin: 0 0 12px 0;"><strong style="color: #f59e0b;">[M]</strong> 👤 **Tester:** Tworzy Plan Testów, wykonuje testy.</p>
+                <p style="text-align: center; color: #9ca3af; font-size: 18px; margin: 5px 0;">↓</p>
+                <p style="margin: 0 0 12px 0;"><strong style="color: #f59e0b;">[M]</strong> 👤 **Product Owner:** Manualnie akceptuje zmiany.</p>
+                <p style="text-align: center; color: #9ca3af; font-size: 18px; margin: 5px 0;">↓</p>
+                <p style="margin: 0 0 12px 0;"><strong style="color: #f59e0b;">[M]</strong> 👤 **ITAL:** Ręcznie tworzy CHG.</p>
+                <p style="text-align: center; color: #9ca3af; font-size: 18px; margin: 5px 0;">↓</p>
+                <p style="margin: 0;"><strong style="color: #22c55e;">[P]</strong> 🚀 **Instalacja na Produkcji**</p>
+            </div>
         </div>
 
-        <div style="font-size: 24px; color: #d1d5da; margin-bottom: 15px;">↓</div>
-
-        <div style="width: 100%; padding: 20px; border: 2px dashed #0366d6; border-radius: 12px; background-color: #ffffff; display: flex; flex-direction: column; align-items: center; box-shadow: 0 2px 8px rgba(0,0,0,0.07);">
-            <div style="font-weight: 600; color: #0366d6; margin-bottom: 20px; font-size: 16px;">🤖 Rozpoczyna się automatyczny potok (pipeline)</div>
-
-            <div style="width: 90%; padding: 12px; margin-bottom: 12px; background-color: #f1f8ff; border-radius: 6px; text-align: center;">⚙️ Skanowanie Checkmarx</div>
-            <div style="font-size: 20px; color: #d1d5da; margin-bottom: 12px;">↓</div>
-            <div style="width: 90%; padding: 12px; margin-bottom: 12px; background-color: #f1f8ff; border-radius: 6px; text-align: center;">⚙️ Testy automatyczne (Cypress, Gatling)</div>
-            <div style="font-size: 20px; color: #d1d5da; margin-bottom: 12px;">↓</div>
-            <div style="width: 90%; padding: 12px; margin-bottom: 12px; background-color: #fffbdd; border-radius: 6px; text-align: center;">👤 Zgoda PO/ITAL (jedyny krok manualny)</div>
-            <div style="font-size: 20px; color: #d1d5da; margin-bottom: 12px;">↓</div>
-            <div style="width: 90%; padding: 12px; margin-bottom: 12px; background-color: #f1f8ff; border-radius: 6px; text-align: center;">⚙️ Instalacja Canary / %</div>
-            <div style="font-size: 20px; color: #d1d5da; margin-bottom: 12px;">↓</div>
-            <div style="width: 90%; padding: 12px; background-color: #f1f8ff; border-radius: 6px; text-align: center;">⚙️ Oczekiwanie na potwierdzenie</div>
+        <div style="flex-shrink: 0; text-align: center; font-size: 48px; color: #6b7280; font-weight: bold;">
+            →
         </div>
 
-        <div style="font-size: 24px; color: #d1d5da; margin-top: 15px;">↓</div>
+        <div style="flex: 1; min-width: 300px; max-width: 400px;">
+            <h3 style="font-size: 18px; color: #166534; text-align: center; margin-bottom: 15px;">7.2 Docelowy Proces</h3>
+            <div style="background-color: #ffffff; padding: 20px; border-radius: 10px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); border: 1px solid #e5e7eb;">
+                <p style="margin: 0 0 12px 0;"><strong style="color: #f59e0b;">[M]</strong> 👤 **Programista:** Uruchamia potok jednym poleceniem.</p>
+                <p style="text-align: center; color: #9ca3af; font-size: 18px; margin: 5px 0;">↓</p>
 
-        <div style="width: 95%; padding: 15px; margin-top: 15px; background-color: #e6ffed; border-radius: 8px; text-align: center; box-shadow: 0 2px 5px rgba(0,0,0,0.05);">
-            <strong>🚀 Pełna instalacja na Produkcji (100%)</strong>
+                <div style="background-color: #f0f9ff; border: 1px dashed #3b82f6; padding: 15px; border-radius: 8px;">
+                    <p style="margin: 0; font-weight: 600; color: #3b82f6; text-align: center; margin-bottom: 15px;">🤖 Zautomatyzowany Pipeline</p>
+                    <p style="margin: 0 0 8px 0;"><strong style="color: #3b82f6;">[A]</strong> ⚙️ Skanowanie Checkmarx</p>
+                    <p style="margin: 0 0 8px 0;"><strong style="color: #3b82f6;">[A]</strong> ⚙️ Testy automatyczne (Cypress, Gatling)</p>
+                    <p style="margin: 0 0 8px 0;"><strong style="color: #f59e0b;">[M]</strong> 👤 Zgoda PO/ITAL (jedyny krok manualny)</p>
+                    <p style="margin: 0 0 8px 0;"><strong style="color: #3b82f6;">[A]</strong> ⚙️ Instalacja Canary / %</p>
+                    <p style="margin: 0;"><strong style="color: #3b82f6;">[A]</strong> ⚙️ Oczekiwanie na potwierdzenie</p>
+                </div>
+
+                <p style="text-align: center; color: #9ca3af; font-size: 18px; margin: 5px 0;">↓</p>
+                <p style="margin: 0;"><strong style="color: #22c55e;">[P]</strong> 🚀 **Pełna instalacja na Produkcji (100%)**</p>
+            </div>
         </div>
+
     </div>
 </div>
 </body>
