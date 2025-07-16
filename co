@@ -24,8 +24,16 @@ WORKDIR /usr/src
 RUN mkdir -p ${MICRODIR}
 
 RUN dnf update -y && \
-    dnf install -y curl dnf-utils gcc-c++ make python3-pip && \
-    curl -fsSL https://rpm.nodesource.com/setup_21.x | bash - && \
+    dnf install -y \
+        bash \
+        curl \
+        dnf-utils \
+        gcc-c++ \
+        make \
+        python3-pip \
+    && dnf clean all
+
+RUN curl -fsSL https://rpm.nodesource.com/setup_21.x | bash - && \
     dnf install -y nodejs && \
     dnf clean all
 
