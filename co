@@ -1,95 +1,26 @@
-  trigger:
-    - main
+pool:
+  name: 'BSK-only-agent-pool'
 
-  variables:
-    imageName: 'gatling-test'
-    imageVersion: '1.0'
-    harborRegistry: 'harbor-pl.ing-ad'
-    harborProject: 'dev'
-    harborServiceConnection: 'ServiceConnectionDoHarbor' # <--- Nazwa Service Connection w Azure DevOps
-    acrBaseImagesRegistry: 'P####bskbaseimages.azurecr.io' # <--- Adres ACR
-    acrRuntimeCommonsRegistry: 'harbor.pl.ing-ad:443'
-    acrTargetServiceConnection: 'ServiceConnectionDoACR'
+variables:
+  harborServiceConnection: 'P08399-Harbor-PUSH'
+  
+  imageRepository: 'moj-nowy-obraz'
+  
+  dockerfilePath: 'Dockerfile'
 
-  pool:
-    vmImage: 'ubuntu-latest'
-
-  stages:
-    - stage: BuildAndPushToHarbor
-      displayName: 'Build Application Image and Push to Harbor'
-      jobs:
-        - job: BuildAndPush
-          displayName: 'Build and Push Docker Image'
-          steps:
-            - task: Docker@2
-              displayName: 'Build Docker Image: $(imageName):$(imageVersion)'
-              inputs:
-                containerRegistry: 'docker.io'
-                repository: '$(imageName)'
-                command: 'build'
-                Dockerfile: 'Dockerfile'
-                tags: |
-                  $(imageVersion)
-                  latest
-
-            - task: Docker@2
-              displayName: 'Login to Harbor: $(harborRegistry)'
-              inputs:
-                containerRegistry: '$(harborServiceConnection)'
-                command: 'login'
-
-            - task: Docker@2
-              displayName: 'Tag Image for Harbor: $(harborRegistry)/$(harborProject)/$(imageName):$(imageVersion)'
-              inputs:
-                containerRegistry: '$(harborServiceConnection)'
-                command: 'tag'
-                arguments: '$(imageName):$(imageVersion) $(harborRegistry)/$(harborProject)/$(imageName):$(imageVersion)'
-
-            - task: Docker@2
-              displayName: 'Push Image to Harbor: $(harborRegistry)/$(harborProject)/$(imageName):$(imageVersion)'
-              inputs:
-                containerRegistry: '$(harborServiceConnection)'
-                repository: '$(harborRegistry)/$(harborProject)/$(imageName)'
-                command: 'push'
-                tags: |
-                  $(imageVersion)
-                  latest
-
-    - stage: SyncHarborToACRAndACRToHarbor
-      displayName: 'Synchronize Images between Harbor and ACR'
-      jobs:
-        - job: SyncImages
-          displayName: 'Perform Image Sync Operations'
-          steps:
-            - task: CDaaSContainerSync@2
-              displayName: 'Sync Base Images from ACR to Harbor'
-              inputs:
-                imageName: '$(acrBaseImagesRegistry)/ing/cicd_aquasec:1.0'
-                sourceCredentials: 'serviceconnection'
-                sourceEndpoint: 'P####-BSKBaseImages-ACR-wr'
-                targetCredentials: 'serviceconnection'
-                targetEndpoint: 'P####-Harbor-PUSH'
-
-            - task: CDaaSContainerSync@2
-              displayName: 'Sync Runtime Commons from Harbor to ACR'
-              inputs:
-                imageName: '$(acrRuntimeCommonsRegistry)/runtime-commons/bsk-rhel8:latest'
-                sourceCredentials: 'serviceconnection'
-                sourceEndpoint: 'P####-Harbor-PULL'
-                targetCredentials: 'serviceconnection'
-                targetEndpoint: 'P####BskPocACRNP-ACR-write'
-
-    - stage: SecurityScanAndPromote
-      displayName: 'Security Scan and Image Promotion'
-      jobs:
-        - job: ScanAndPromote
-          displayName: 'Scan and Promote Image'
-          steps:
-            - task: BskContainerScanning@2
-              displayName: 'Perform Container Security Scan'
-              inputs:
-                scanningServiceEndpoint: 'P*****-BSK-Prisma-SC'
-                harborEndpoint: 'P17991-BSK-Harbor-SC'
-                image: 'P******/$(imageName)'
-                tags: '$(imageVersion)'
-                Move: 'False'
+stages:
+- stage: BuildAndPush
+  displayName: Build and Push to Harbor
+  jobs:
+  - job: Build
+    displayName: Build Docker image
+    steps:
+    - task: Docker@2
+      displayName: Build and push image to Harbor
+      inputs:
+        containerRegistry: $(harborServiceConnection)
+        repository: $(imageRepository)
+        command: 'buildAndPush'
+        Dockerfile: $(dockerfilePath)
+        tags: |
+          $(Build.BuildId)
