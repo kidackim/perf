@@ -21,14 +21,6 @@ ENV PIP_ROOT_USER_ACTION=${PIP_ROOT_USER_ACTION} \
 
 WORKDIR /usr/src
 
-RUN mkdir -p ${MICRODIR}
-
-RUN dnf update -y && \
-    dnf install -y wget && \
-    wget --no-check-certificate -O /usr/local/bin/jq -qc https://github.com/stedolan/jq/releases/download/jq-1.6/jq-linux64 && \
-    chmod +x /usr/local/bin/jq && \
-    dnf clean all
-
 ENV NODE_TLS_REJECT_UNAUTHORIZED=0
 
 COPY package*.json ./
