@@ -1,34 +1,34 @@
-FROM registry.access.redhat.com/ubi9/nodejs-22
+stages:
+- stage: Build
+  jobs:
+  - job: MainBuild  # Nazwa pierwszego joba (obecnego)
+    pool:           # Tutaj możesz określić domyślną pulę dla tego joba
+      name: YourDefaultAgentPool # Zmień na nazwę Twojej domyślnej puli agentów
+    steps:
+    - Dockerfile: 'Dockerfile'
+      tags: '1.0'
+    # ... inne kroki, które mają działać na domyślnej puli agentów
 
-ARG MICRODIR=/microdir
-ARG PIP_ROOT_USER_ACTION=ignore
-ARG LANG=en_US.UTF-8
-ARG LANGUAGE=en_US.UTF-8
-ARG LC_COLLATE=C
-ARG LC_CTYPE=en_US.UTF-8
-ARG NLS_OS_CHARSET=AL32UTF8
-ARG USE_GKE_GCLOUD_AUTH_PLUGIN=True
+  - job: ContainerScanningAndSync  # Nowy job dla tasków skanowania i synchronizacji
+    pool:                        # Określ tutaj inną pulę agentów dla tego joba
+      name: YourCustomAgentPool    # Zmień na nazwę puli, której chcesz użyć dla tych tasków
+      # vmImage: 'ubuntu-latest' # Możesz użyć vmImage dla hostowanych agentów
+    steps:
+    - task: BskContainerScanning@3
+      inputs:
+        scanningRegistry: 'acr'
+        ScanningServiceEndpoint: 'P08399-BSK-Prisma-SC'
+        ACREndpoint: 'P08399-hceACR-ACR-read'
+        Image: 'P08399/gatling-test'
+        Tag: '1.0'
+        continueOnError: true
 
-LABEL maintainer="ci.cd@ing.pl"
-
-ENV PIP_ROOT_USER_ACTION=${PIP_ROOT_USER_ACTION} \
-    LANG=${LANG} \
-    LANGUAGE=${LANGUAGE} \
-    LC_COLLATE=${LC_COLLATE} \
-    LC_CTYPE=${LC_CTYPE} \
-    NLS_OS_CHARSET=${NLS_OS_CHARSET} \
-    USE_GKE_GCLOUD_AUTH_PLUGIN=${USE_GKE_GCLOUD_AUTH_PLUGIN}
-
-WORKDIR /usr/src
-
-ENV NODE_TLS_REJECT_UNAUTHORIZED=0
-
-COPY package*.json ./
-RUN npm config set strict-ssl false && \
-    npm install
-
-COPY . .
-
-COPY sample.env .env
-
-CMD ["/bin/sh", "-c", "npm run test"]
+    - task: CDaaSContainerSync@2
+      retryCountOnFailure: 5
+      inputs:
+        ImageName: 'p08399hceacr.azurecr.io/gatling-test:1.0'
+        sourceCredentials: 'serviceconnection'
+        sourceEndpoint: 'P08399-hceACR-ACR-read'
+        targetCredentials: 'serviceconnection'
+        targetEndpoint: 'P08399-Harbor-PUSH'
+        displayName: 'Copy gatling-test:1.0 to BSK Harbor registry'
