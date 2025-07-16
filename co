@@ -1,34 +1,42 @@
 stages:
 - stage: Build
   jobs:
-  - job: MainBuild  # Nazwa pierwszego joba (obecnego)
-    pool:           # Tutaj możesz określić domyślną pulę dla tego joba
-      name: YourDefaultAgentPool # Zmień na nazwę Twojej domyślnej puli agentów
+  - job: BuildDockerImage
+    displayName: 'Build Docker Image'
+    pool:
+      vmImage: 'ubuntu-latest' # Używasz vmImage, co jest poprawne dla hostowanych agentów
     steps:
-    - Dockerfile: 'Dockerfile'
-      tags: '1.0'
-    # ... inne kroki, które mają działać na domyślnej puli agentów
+    - task: Docker@2
+      displayName: 'Build and push image to ACR'
+      inputs:
+        containerRegistry: 'P08399-hceACR-ACR-write'
+        repository: 'P08399/gatling-test'
+        command: 'buildAndPush' # Używamy buildAndPush, aby zbudować i od razu wysłać do ACR
+        dockerfile: 'Dockerfile'
+        tags: '1.0'
 
-  - job: ContainerScanningAndSync  # Nowy job dla tasków skanowania i synchronizacji
-    pool:                        # Określ tutaj inną pulę agentów dla tego joba
-      name: YourCustomAgentPool    # Zmień na nazwę puli, której chcesz użyć dla tych tasków
-      # vmImage: 'ubuntu-latest' # Możesz użyć vmImage dla hostowanych agentów
+  - job: ContainerScanningAndSync
+    displayName: 'Container Scanning and Sync'
+    dependsOn: BuildDockerImage # Ten job uruchomi się tylko po sukcesie joba 'BuildDockerImage'
+    pool:
+      name: BSK-only-agent-pool # Używasz dedykowanej puli agentów
     steps:
-    - task: BskContainerScanning@3
+    - task: CDaaSContainerSync@2 # Krok 1: Kopiowanie do Harbora
+      displayName: 'Copy gatling-test:1.0 to BSK Harbor registry'
+      retryCountOnFailure: 5
+      inputs:
+        ImageName: 'p08399hceacr.azurecr.io/gatling-test:1.0' # Zakładam, że ten obraz został zbudowany w poprzednim jobie i jest dostępny w ACR
+        sourceCredentials: 'serviceconnection'
+        sourceEndpoint: 'P08399-hceACR-ACR-read'
+        targetCredentials: 'serviceconnection'
+        targetEndpoint: 'P08399-Harbor-PUSH' # Endpoint dla Harbora
+
+    - task: BskContainerScanning@3 # Krok 2: Skanowanie
+      displayName: 'Scan Container'
+      continueOnError: true
       inputs:
         scanningRegistry: 'acr'
         ScanningServiceEndpoint: 'P08399-BSK-Prisma-SC'
         ACREndpoint: 'P08399-hceACR-ACR-read'
-        Image: 'P08399/gatling-test'
+        Image: 'P08399/gatling-test' # Skanujesz ten sam obraz, który został zbudowany/skopiowany
         Tag: '1.0'
-        continueOnError: true
-
-    - task: CDaaSContainerSync@2
-      retryCountOnFailure: 5
-      inputs:
-        ImageName: 'p08399hceacr.azurecr.io/gatling-test:1.0'
-        sourceCredentials: 'serviceconnection'
-        sourceEndpoint: 'P08399-hceACR-ACR-read'
-        targetCredentials: 'serviceconnection'
-        targetEndpoint: 'P08399-Harbor-PUSH'
-        displayName: 'Copy gatling-test:1.0 to BSK Harbor registry'
