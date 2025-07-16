@@ -1,4 +1,4 @@
-FROM registry.access.redhat.com/ubi8/ubi-minimal:latest
+FROM registry.access.redhat.com/ubi9/nodejs-22
 
 ARG MICRODIR=/microdir
 ARG PIP_ROOT_USER_ACTION=ignore
@@ -24,20 +24,7 @@ WORKDIR /usr/src
 RUN mkdir -p ${MICRODIR}
 
 RUN dnf update -y && \
-    dnf install -y \
-        bash \
-        curl \
-        dnf-utils \
-        gcc-c++ \
-        make \
-        python3-pip \
-    && dnf clean all
-
-RUN curl -fsSL https://rpm.nodesource.com/setup_21.x | bash - && \
-    dnf install -y nodejs && \
-    dnf clean all
-
-RUN dnf install -y wget && \
+    dnf install -y wget && \
     wget --no-check-certificate -O /usr/local/bin/jq -qc https://github.com/stedolan/jq/releases/download/jq-1.6/jq-linux64 && \
     chmod +x /usr/local/bin/jq && \
     dnf clean all
