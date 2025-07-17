@@ -24,6 +24,7 @@ WORKDIR /opt/app-root/src
 
 USER root
 
+# Aktualizuj pakiety i instaluj narzędzia potrzebne TYLKO DO BUDOWANIA lub npm install
 RUN dnf update -y && \
     dnf install -y git sqlite && \
     dnf clean all && rm -rf /var/cache/dnf/
@@ -35,11 +36,19 @@ RUN npm config set strict-ssl false && \
 COPY . .
 COPY sample.env .env
 
-FROM registry.access.redhat.com/ubi9/nodejs-22
+# --- ETAP 2: OSTATECZNY OBRAZ (MINIMALNY) ---
+FROM registry.access.redhat.com/ubi9/ubi-minimal
 
 ENV NODE_TLS_REJECT_UNAUTHORIZED=0
 
 USER root
+
+# Instalacja Node.js i npm w obrazie minimalnym
+RUN dnf update -y && \
+    dnf module enable nodejs:22 -y && \
+    dnf install -y nodejs && \
+    dnf clean all && rm -rf /var/cache/dnf/*
+
 RUN mkdir -p /app && \
     chown 1001:0 /app
 
@@ -47,6 +56,7 @@ USER 1001
 
 WORKDIR /app
 
+# Skopiuj TYLKO niezbędne pliki z etapu budowania
 COPY --from=builder /opt/app-root/src/node_modules ./node_modules
 COPY --from=builder /opt/app-root/src/package*.json ./
 COPY --from=builder /opt/app-root/src/sample.env ./sample.env
