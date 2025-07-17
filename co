@@ -24,12 +24,24 @@ WORKDIR /opt/app-root/src
 
 USER root
 
+# Instalacja narzędzi kompilacji, w tym 'unzip'
 RUN dnf update -y && \
-    dnf clean all
+    dnf install -y make gcc gcc-c++ autoconf automake libtool unzip tar \
+                   zlib-devel && \
+    dnf clean all && rm -rf /var/cache/dnf/*
 
-RUN dnf remove -y git sqlite && \
-    dnf clean all
+# Kompilacja i instalacja SQLITE ze źródeł
+COPY sqlite-autoconf-3500200.zip /tmp/
+RUN cd /tmp && \
+    unzip sqlite-autoconf-3500200.zip && \
+    cd sqlite-autoconf-3500200 && \
+    ./configure --prefix=/usr --disable-static && \
+    make && \
+    make install && \
+    ldconfig && \
+    rm -rf /tmp/sqlite-autoconf-3500200 /tmp/sqlite-autoconf-3500200.zip
 
+# Reszta Dockerfile dla Twojej aplikacji
 RUN mkdir -p /app && \
     chown 1001:0 /app
 
