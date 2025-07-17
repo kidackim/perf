@@ -1,49 +1,49 @@
-# azure-pipeline.yml
+FROM registry.access.redhat.com/ubi9/nodejs-22
 
-stages:
-- stage: Build
-  displayName: 'Build'
-  jobs:
-  - job: BuildDockerImage
-    displayName: 'Build Docker Image'
-    pool:
-      vmImage: 'ubuntu-latest' # Używa agenta Microsoft Hosted Agent
-    steps:
-    - task: Docker@2
-      displayName: 'Build and Push image to ACR'
-      inputs:
-        containerRegistry: 'P08399-hceacr-ACR-write'
-        repository: 'P08399/gatling-test'
-        command: 'buildAndPush'
-        Dockerfile: 'Dockerfile'
-        # ZMIANA: Użycie dynamicznego taga dla obrazu
-        tags: '$(Build.BuildId)'
-        # Możesz również dodać tag ':latest' aby zawsze wskazywał na najnowszą udaną kompilację
-        # tags: '$(Build.BuildId),latest'
+ARG MICRODIR=/microdir
+ARG PIP_ROOT_USER_ACTION=ignore
+ARG LANG=en_US.UTF-8
+ARG LANGUAGE=en_US.UTF-8
+ARG LC_COLLATE=C
+ARG LC_CTYPE=en_US.UTF-8
+ARG NLS_OS_CHARSET=AL32UTF8
+ARG USE_GKE_GCLOUD_AUTH_PLUGIN=True
 
-  - job: ContainerScanningAndSync
-    displayName: 'Container Scanning and Sync'
-    dependsOn: BuildDockerImage # Upewnij się, że ten job czeka na zakończenie budowania obrazu
-    pool:
-      # Upewnij się, że ta pula agentów jest dostępna i ma potrzebne uprawnienia
-      name: BSK-only-agent-pool
-    steps:
-    - task: CdaasContainerSync@2
-      displayName: 'Copy gatling-test:$(Build.BuildId) to BSK Harbor registry'
-      inputs:
-        # ZMIANA: Odwołanie do obrazu z dynamicznym tagiem
-        imageName: 'p08399hceacr.azurecr.io/p08399/gatling-test:$(Build.BuildId)'
-        sourceEndpoint: 'P08399-hceacr-ACR-read'
-        targetCredentials: 'serviceconnection'
-        targetRepository: 'p08399-Harbor-push'
+LABEL maintainer="ci.coding.pl"
 
-    - task: BoiContainerScanning@3
-      displayName: 'Scan Container'
-      continueOnError: true # Kontynuuj pipeline nawet jeśli skanowanie znajdzie podatności
-      inputs:
-        scanningRegistry: 'acr'
-        scanningServiceEndpoint: 'P08399-BSK-Prisma-SC'
-        ACREndpoint: 'P08399-hceacr-ACR-read'
-        Image: 'p08399/gatling-test'
-        # ZMIANA: Odwołanie do obrazu z dynamicznym tagiem
-        Tag: '$(Build.BuildId)'
+ENV PIP_ROOT_USER_ACTION=${PIP_ROOT_USER_ACTION} \
+    LANG=${LANG} \
+    LANGUAGE=${LANGUAGE} \
+    LC_COLLATE=${LC_COLLATE} \
+    LC_CTYPE=${LC_CTYPE} \
+    NLS_OS_CHARSET=${NLS_OS_CHARSET} \
+    USE_GKE_GCLOUD_AUTH_PLUGIN=${USE_GKE_GCLOUD_AUTH_PLUGIN} \
+    NODE_TLS_REJECT_UNAUTHORIZED=0
+
+WORKDIR /opt/app-root/src
+
+USER root
+
+RUN dnf update -y && \
+    dnf clean all && rm -rf /var/cache/dnf/
+
+RUN dnf remove -y git sqlite && \
+    dnf clean all && rm -rf /var/cache/dnf/
+
+RUN mkdir -p /app && \
+    chown 1001:0 /app
+
+USER 1001
+
+WORKDIR /app
+
+COPY package*.json ./
+
+RUN npm config set strict-ssl false && \
+    npm install --unsafe-perm
+
+COPY . .
+
+COPY sample.env .env
+
+CMD ["/bin/sh", "-c", "npm run test"]
