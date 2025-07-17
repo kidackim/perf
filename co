@@ -1,42 +1,44 @@
-stages:
-- stage: Build
-  jobs:
-  - job: BuildDockerImage
-    displayName: 'Build Docker Image'
-    pool:
-      vmImage: 'ubuntu-latest' # Używasz vmImage, co jest poprawne dla hostowanych agentów
-    steps:
-    - task: Docker@2
-      displayName: 'Build and push image to ACR'
-      inputs:
-        containerRegistry: 'P08399-hceACR-ACR-write'
-        repository: 'P08399/gatling-test'
-        command: 'buildAndPush' # Używamy buildAndPush, aby zbudować i od razu wysłać do ACR
-        dockerfile: 'Dockerfile'
-        tags: '1.0'
+FROM registry.access.redhat.com/ubi9/nodejs-22
 
-  - job: ContainerScanningAndSync
-    displayName: 'Container Scanning and Sync'
-    dependsOn: BuildDockerImage # Ten job uruchomi się tylko po sukcesie joba 'BuildDockerImage'
-    pool:
-      name: BSK-only-agent-pool # Używasz dedykowanej puli agentów
-    steps:
-    - task: CDaaSContainerSync@2 # Krok 1: Kopiowanie do Harbora
-      displayName: 'Copy gatling-test:1.0 to BSK Harbor registry'
-      retryCountOnFailure: 5
-      inputs:
-        ImageName: 'p08399hceacr.azurecr.io/gatling-test:1.0' # Zakładam, że ten obraz został zbudowany w poprzednim jobie i jest dostępny w ACR
-        sourceCredentials: 'serviceconnection'
-        sourceEndpoint: 'P08399-hceACR-ACR-read'
-        targetCredentials: 'serviceconnection'
-        targetEndpoint: 'P08399-Harbor-PUSH' # Endpoint dla Harbora
+ARG MICRODIR=/microdir
+ARG PIP_ROOT_USER_ACTION=ignore
+ARG LANG=en_US.UTF-8
+ARG LANGUAGE=en_US.UTF-8
+ARG LC_COLLATE=C
+ARG LC_CTYPE=en_US.UTF-8
+ARG NLS_OS_CHARSET=AL32UTF8
+ARG USE_GKE_GCLOUD_AUTH_PLUGIN=True
 
-    - task: BskContainerScanning@3 # Krok 2: Skanowanie
-      displayName: 'Scan Container'
-      continueOnError: true
-      inputs:
-        scanningRegistry: 'acr'
-        ScanningServiceEndpoint: 'P08399-BSK-Prisma-SC'
-        ACREndpoint: 'P08399-hceACR-ACR-read'
-        Image: 'P08399/gatling-test' # Skanujesz ten sam obraz, który został zbudowany/skopiowany
-        Tag: '1.0'
+LABEL maintainer="ci.coding.pl"
+
+ENV PIP_ROOT_USER_ACTION=${PIP_ROOT_USER_ACTION} \
+    LANG=${LANG} \
+    LANGUAGE=${LANGUAGE} \
+    LC_COLLATE=${LC_COLLATE} \
+    LC_CTYPE=${LC_CTYPE} \
+    NLS_OS_CHARSET=${NLS_OS_CHARSET} \
+    USE_GKE_GCLOUD_AUTH_PLUGIN=${USE_GKE_GCLOUD_AUTH_PLUGIN} \
+    NODE_TLS_REJECT_UNAUTHORIZED=0
+
+WORKDIR /opt/app-root/src
+
+RUN dnf update -y && \
+    dnf clean all
+
+RUN mkdir -p /app && \
+    chown 1001:0 /app
+
+WORKDIR /app
+
+USER 1001
+
+COPY package*.json ./
+
+RUN npm config set strict-ssl false && \
+    npm install --unsafe-perm
+
+COPY . .
+
+COPY sample.env .env
+
+CMD ["/bin/sh", "-c", "npm run test"]
