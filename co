@@ -1,4 +1,4 @@
-FROM registry.access.redhat.com/ubi9/nodejs-22
+FROM registry.access.redhat.com/ubi9/nodejs-22 AS builder
 
 ARG MICRODIR=/microdir
 ARG PIP_ROOT_USER_ACTION=ignore
@@ -25,11 +25,21 @@ WORKDIR /opt/app-root/src
 USER root
 
 RUN dnf update -y && \
+    dnf install -y git sqlite && \
     dnf clean all && rm -rf /var/cache/dnf/
 
-RUN dnf remove -y git sqlite && \
-    dnf clean all && rm -rf /var/cache/dnf/
+COPY package*.json ./
+RUN npm config set strict-ssl false && \
+    npm install --unsafe-perm
 
+COPY . .
+COPY sample.env .env
+
+FROM registry.access.redhat.com/ubi9/nodejs-22
+
+ENV NODE_TLS_REJECT_UNAUTHORIZED=0
+
+USER root
 RUN mkdir -p /app && \
     chown 1001:0 /app
 
@@ -37,13 +47,9 @@ USER 1001
 
 WORKDIR /app
 
-COPY package*.json ./
-
-RUN npm config set strict-ssl false && \
-    npm install --unsafe-perm
-
-COPY . .
-
-COPY sample.env .env
+COPY --from=builder /opt/app-root/src/node_modules ./node_modules
+COPY --from=builder /opt/app-root/src/package*.json ./
+COPY --from=builder /opt/app-root/src/sample.env ./sample.env
+COPY --from=builder /opt/app-root/src/ .
 
 CMD ["/bin/sh", "-c", "npm run test"]
