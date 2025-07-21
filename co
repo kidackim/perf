@@ -1,32 +1,80 @@
- - name: Find all existing Docker image folders to prune
+- name: Dynamically find, clean old, and load Docker image
+  hosts: all
+  gather_facts: false
+
+  become: true
+  become_user: appown
+  become_method: sudo
+
+  vars:
+    base_docker_path: "/app/docker/images"
+    build_id_from_pipeline: "{{ build_id }}"
+    
+    current_image_full_folder_name: "skopeoCopy-gatling-test-{{ build_id_from_pipeline }}" 
+    current_image_tar_file_name: "gatling-test-{{ build_id_from_pipeline }}.tar"
+
+  tasks:
+    - name: Verify current user and groups
+      ansible.builtin.shell: |
+        whoami
+        id
+        groups
+      register: user_info
+
+    - name: Display current user and groups
+      ansible.builtin.debug:
+        msg: |
+          "Current user: {{ user_info.stdout }}"
+          "User ID info: {{ user_info.stdout_lines[1] | default('N/A') }}"
+          "User groups: {{ user_info.stdout_lines[2] | default('N/A') }}"
+
+    - name: Find all existing Docker image folders to prune
       ansible.builtin.find:
         paths: "{{ base_docker_path }}"
         file_type: directory
-        # Wyszukaj wszystkie foldery zaczynające się na 'skopeoCopy-gatling-test-',
-        # które są kandydatami do usunięcia
         patterns: "skopeoCopy-gatling-test-*"
-        recurse: false # Szukaj tylko na pierwszym poziomie w base_docker_path
+        recurse: false
       register: all_candidate_image_folders
 
     - name: Set fact for folders to remove (excluding current build)
       ansible.builtin.set_fact:
         folders_to_remove: |
           {{ all_candidate_image_folders.files
-             | selectattr('path', 'search', current_image_folder_pattern, invert=True) # Filtruj, wykluczając bieżący folder
+             | selectattr('path', 'match', current_image_full_folder_name ~ '$', invert=True)
              | map(attribute='path') | list }}
-      # Wykonaj tylko, jeśli coś zostało znalezione
       when: all_candidate_image_folders.files | length > 0
 
     - name: Remove old Docker image folders (as root)
       ansible.builtin.file:
         path: "{{ item }}"
-        state: absent # Usuń katalog
-      loop: "{{ folders_to_remove }}" # Iteruj po liście folderów do usunięcia
-      # === WAŻNE: To usuwanie prawdopodobnie wymaga uprawnień roota ===
+        state: absent
+      loop: "{{ folders_to_remove }}"
       become: true
-      become_user: root # Wykonaj to jako root
+      become_user: root
       become_method: sudo
-      # =================================================================
       when: folders_to_remove | length > 0
-      # Możesz dodać fail_if_not_found: false, jeśli chcesz ignorować błędy,
-      # gdy folder został już usunięty lub nigdy nie istniał.
+
+    - name: Find the exact Docker image folder name for current build
+      ansible.builtin.find:
+        paths: "{{ base_docker_path }}"
+        file_type: directory
+        patterns: "{{ current_image_full_folder_name }}*"
+        recurse: false
+      register: found_docker_folders
+
+    - name: Set fact for found folder path (current build)
+      ansible.builtin.set_fact:
+        full_docker_folder_path: "{{ found_docker_folders.files[0].path if found_docker_folders.files | length > 0 else omit }}"
+      when: found_docker_folders.files | length > 0
+
+    - name: Fail if no Docker image folder was found for current build
+      ansible.builtin.fail:
+        msg: "ERROR: Could not find Docker image folder starting with {{ current_image_full_folder_name }} in {{ base_docker_path }}"
+      when: full_docker_folder_path is not defined
+
+    - name: Load Docker image from the found folder
+      ansible.builtin.shell: |
+        docker load -i "{{ full_docker_folder_path }}/{{ current_image_tar_file_name }}"
+      args:
+        chdir: "{{ full_docker_folder_path }}"
+      when: full_docker_folder_path is defined
