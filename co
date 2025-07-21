@@ -1,15 +1,32 @@
- - script: |
-        echo "Executing cleanup of /app/docker/images on remote host as root."
-        
-        # WAŻNE: To polecenie zostanie wykonane jako root.
-        # Upewnij się, że użytkownik, który loguje się przez SSH (ansible_user),
-        # ma skonfigurowane sudo bez hasła do wykonania 'sudo su - root' lub podobnego.
-        
-        ansible all -i '${{ parameters.hostname }},' \
-          -m ansible.builtin.shell \
-          -a "rm -rf /app/docker/images/*" \
-          -e "ansible_user: ${{ parameters.hostname }}-USER ansible_password: ${{ parameters.hostname }}-PASS" \
-          --become --become-user=root --become-method=sudo # <<< TUTAJ JEST ZMIANA! >>>
+ - name: Find all existing Docker image folders to prune
+      ansible.builtin.find:
+        paths: "{{ base_docker_path }}"
+        file_type: directory
+        # Wyszukaj wszystkie foldery zaczynające się na 'skopeoCopy-gatling-test-',
+        # które są kandydatami do usunięcia
+        patterns: "skopeoCopy-gatling-test-*"
+        recurse: false # Szukaj tylko na pierwszym poziomie w base_docker_path
+      register: all_candidate_image_folders
 
-      displayName: 'Clean /app/docker/images on remote host (as root)'
-      condition: succeeded() # Wykonaj tylko jeśli poprzednie kroki zakończyły się sukcesem
+    - name: Set fact for folders to remove (excluding current build)
+      ansible.builtin.set_fact:
+        folders_to_remove: |
+          {{ all_candidate_image_folders.files
+             | selectattr('path', 'search', current_image_folder_pattern, invert=True) # Filtruj, wykluczając bieżący folder
+             | map(attribute='path') | list }}
+      # Wykonaj tylko, jeśli coś zostało znalezione
+      when: all_candidate_image_folders.files | length > 0
+
+    - name: Remove old Docker image folders (as root)
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: absent # Usuń katalog
+      loop: "{{ folders_to_remove }}" # Iteruj po liście folderów do usunięcia
+      # === WAŻNE: To usuwanie prawdopodobnie wymaga uprawnień roota ===
+      become: true
+      become_user: root # Wykonaj to jako root
+      become_method: sudo
+      # =================================================================
+      when: folders_to_remove | length > 0
+      # Możesz dodać fail_if_not_found: false, jeśli chcesz ignorować błędy,
+      # gdy folder został już usunięty lub nigdy nie istniał.
