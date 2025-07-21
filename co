@@ -1,27 +1,27 @@
 # playbooks/docker_load.yml
 
 - name: Dynamically find and load Docker image
-  hosts: all # Celuje w hosta przekazanego dynamicznie z pipeline'u
-  gather_facts: false # Nie zbieramy faktów o systemie dla tego zadania
+  hosts: all
+  gather_facts: false
 
-  # Domyślne podnoszenie uprawnień dla tego play:
-  # Logujemy się jako użytkownik Ansible, a następnie przełączamy na 'appown' przez 'sudo'.
-  become: true
-  become_user: appown
-  become_method: sudo
+  # === ZMIENIONE LINIE ===
+  become: true         # Włącz użycie podnoszenia uprawnień
+  become_user: root    # <-- Uruchom CAŁY play jako root
+  become_method: sudo  # Użyj metody sudo
+  # ========================
 
   vars:
     base_docker_path: "/app/docker/images"
-    # build_id_from_pipeline zostanie przekazane jako extra_var z pipeline'u Azure DevOps.
+    build_id_from_pipeline: "{{ build_id }}"
 
   tasks:
+    # --- Task diagnostyczny (do usunięcia po weryfikacji) ---
     - name: Verify current user and groups
       ansible.builtin.shell: |
         whoami
         id
         groups
       register: user_info
-      # Ten task również działa jako 'appown', korzystając z domyślnych ustawień play.
 
     - name: Display current user and groups
       ansible.builtin.debug:
@@ -29,13 +29,14 @@
           "Current user: {{ user_info.stdout }}"
           "User ID info: {{ user_info.stdout_lines[1] | default('N/A') }}"
           "User groups: {{ user_info.stdout_lines[2] | default('N/A') }}"
+    # --------------------------------------------------------
 
     - name: Find the exact Docker image folder name
       ansible.builtin.find:
         paths: "{{ base_docker_path }}"
         file_type: directory
         patterns: "skopeoCopy-gatling-test-{{ build_id_from_pipeline }}*"
-        recurse: false # Szukamy tylko w base_docker_path, nie w podkatalogach
+        recurse: false
       register: found_docker_folders
 
     - name: Set fact for found folder path
@@ -48,27 +49,10 @@
         msg: "ERROR: Could not find Docker image folder starting with skopeoCopy-gatling-test-{{ build_id_from_pipeline }} in {{ base_docker_path }}"
       when: full_docker_folder_path is not defined
 
-    # === TASK WYKONYWANY JAKO ROOT ===
-    # Ten task zmienia właściciela folderu, co wymaga uprawnień roota.
-    # Nadpisujemy 'become_user' tylko dla tego taska.
-    - name: Change ownership of Docker image folder to appown (as root)
-      ansible.builtin.file:
-        path: "{{ full_docker_folder_path }}"
-        owner: appown
-        group: appown
-        mode: '0755' # Zapewnij uprawnienia: appown rwx, inni rx
-        recurse: true # Zmień właściciela rekurencyjnie dla zawartości folderu
-      # Specyficzne ustawienia 'become' TYLKO dla tego taska:
-      become: true # Włącz podnoszenie uprawnień
-      become_user: root # Wykonaj ten task jako użytkownik 'root'
-      become_method: sudo # Użyj metody sudo
-      when: full_docker_folder_path is defined
-    # ================================
-
     - name: Load Docker image from the found folder
       ansible.builtin.shell: |
         docker load -i "{{ full_docker_folder_path }}/gatling-test-{{ build_id_from_pipeline }}.tar"
       args:
-        chdir: "{{ full_docker_folder_path }}" # Zmień katalog przed wykonaniem polecenia
+        chdir: "{{ full_docker_folder_path }}"
       when: full_docker_folder_path is defined
-      # Ten task działa jako 'appown', ponieważ domyślne 'become' play'a to 'appown'.
+      # Tutaj nie musisz dodawać become: true, bo jest już na poziomie play i będzie wykonywane jako root
