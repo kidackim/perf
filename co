@@ -1,19 +1,17 @@
-tasks:
-    # === NOWY TASK DIAGNOSTYCZNY ===
-    - name: Verify current user and groups
-      ansible.builtin.shell: |
-        whoami
-        id
-        groups
-      register: user_info
-      # Upewnij się, że ten task też działa jako appown
-      become: true
-      become_user: appown
-      become_method: sudo
-
-    - name: Display current user and groups
-      ansible.builtin.debug:
-        msg: |
-          "Current user: {{ user_info.stdout }}"
-          "User ID info: {{ user_info.stdout_lines[1] | default('N/A') }}" # Druga linia z 'id'
-          "User groups: {{ user_info.stdout_lines[2] | default('N/A') }}" # Trzecia linia z 'groups'
+  # === NOWY TASK: Zmień właściciela katalogu z obrazem Dockera ===
+    - name: Change ownership of Docker image folder to appown
+      ansible.builtin.file:
+        path: "{{ full_docker_folder_path }}"
+        state: directory
+        owner: appown # Ustaw właściciela na appown
+        group: appown # Ustaw grupę na appown
+        mode: '0755' # Upewnij się, że appown ma pełne prawa, a inni mogą wejść
+        recurse: true # Zmień uprawnienia również dla zawartości folderu, jeśli to konieczne
+      when: full_docker_folder_path is defined
+      # Ten task również będzie działał jako appown (przez sudo),
+      # co wymaga, aby appown miał uprawnienia do chown na tych plikach.
+      # Jeśli appown nie może zmienić właściciela, bo katalog należy do roota i jest restrykcyjny,
+      # to ten task też może zawieść. W takim wypadku, trzeba by było zmienić become_user na 'root'
+      # TYLKO dla tego taska, a potem wrócić do 'appown' dla docker load.
+      # Ale na razie próbujemy w całości jako appown.
+    # ================================================================
