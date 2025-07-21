@@ -1,33 +1,39 @@
-        echo "Executing docker load command on specified host."
+# playbooks/docker_load.yml
 
-        # Upewnij się, że zmienna Build.BuildId z Twojego pipeline'u
-        # zawiera PEŁNĄ nazwę folderu, np. "20037686-md77tvvg".
-        # Jeśli Build.BuildId to tylko "20037686", to musimy znaleźć sposób na resztę nazwy.
-        # Na podstawie Twoich poprzednich zapytań i tego co widać w "CDASContainerScanning@2"
-        # image name: p08399/gatling-test:$(Build.BuildId)
-        # Zakładam, że $(Build.BuildId) jest pełnym unikalnym tagiem/ID.
-        
-        # Nazwa FOLDERU, w którym znajduje się obraz .tar
-        # np. skopeoCopy-gatling-test-20037686-md77tvvg
-        DOCKER_IMAGE_FOLDER_NAME="skopeoCopy-gatling-test-$(Build.BuildId)"
-        
-        # Pełna ścieżka do katalogu, gdzie jest plik .tar
-        # np. /app/docker/images/skopeoCopy-gatling-test-20037686-md77tvvg
-        DOCKER_FULL_PATH="/app/docker/images/${DOCKER_IMAGE_FOLDER_NAME}"
-        
-        # Nazwa pliku .tar wewnątrz folderu
-        # np. gatling-test-20037686.tar
-        DOCKER_TAR_FILE="gatling-test-$(Build.BuildId).tar"
-        
-        # Pełna ścieżka do pliku .tar
-        DOCKER_TAR_FULL_PATH="${DOCKER_FULL_PATH}/${DOCKER_TAR_FILE}"
+- name: Dynamically find and load Docker image
+  hosts: all # Będzie celować w hosta przekazanego dynamicznie
+  gather_facts: false # Nie potrzebujemy faktów o systemie dla tego zadania
+  # remote_user: "{{ ansible_user }}" # Jeśli chcesz użyć zmiennej ansible_user z inwentarza lub extra-vars
+  # become: true # Włącz sudo, jeśli docker load wymaga uprawnień roota
 
-        ansible all -i '${{ parameters.hostname }},' \
-          -m ansible.builtin.shell \
-          -a "cd ${DOCKER_FULL_PATH} && docker load -i ${DOCKER_TAR_FILE}" \
-          -e "ansible_user: ${{ parameters.hostname }}-USER ansible_password: ${{ parameters.hostname }}-PASS"
-          # Pamiętaj o bezpieczeństwie hasła!
-          # I o definicji parametru hostname z pełnym FQDN/IP.
+  vars:
+    base_docker_path: "/app/docker/images"
+    # build_id_from_pipeline: "{{ build_id }}" # Ta zmienna zostanie przekazana z pipeline'u
 
-      displayName: 'Perform docker load on remote host'
-      condition: succeeded()
+  tasks:
+    - name: Find the exact Docker image folder name
+      ansible.builtin.find:
+        paths: "{{ base_docker_path }}"
+        file_type: directory
+        patterns: "skopeoCopy-gatling-test-{{ build_id_from_pipeline }}*" # Użyj wzorca z build_id
+        # use_regex: true # Patterns są już domyślnie traktowane jako glob, nie regex
+        recurse: false # Szukaj tylko w base_docker_path, nie w podkatalogach
+      register: found_docker_folders
+
+    - name: Set fact for found folder path
+      ansible.builtin.set_fact:
+        full_docker_folder_path: "{{ found_docker_folders.files[0].path if found_docker_folders.files | length > 0 else omit }}"
+      when: found_docker_folders.files | length > 0
+
+    - name: Fail if no Docker image folder was found
+      ansible.builtin.fail:
+        msg: "ERROR: Could not find Docker image folder starting with skopeoCopy-gatling-test-{{ build_id_from_pipeline }} in {{ base_docker_path }}"
+      when: full_docker_folder_path is not defined
+
+    - name: Load Docker image from the found folder
+      ansible.builtin.shell: |
+        docker load -i "{{ full_docker_folder_path }}/gatling-test-{{ build_id_from_pipeline }}.tar"
+      args:
+        chdir: "{{ full_docker_folder_path }}" # Upewnij się, że jesteśmy w tym folderze
+      when: full_docker_folder_path is defined
+      # Pamiętaj, że użytkownik Ansible musi mieć uprawnienia do uruchamiania Dockera
