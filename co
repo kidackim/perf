@@ -1,23 +1,14 @@
-Zadanie polega na przygotowaniu i konfiguracji CI/CD (pipeline) w Azure DevOps, który będzie odpowiedzialny za automatyczne budowanie i wypychanie obrazu Docker zawierającego środowisko do przeprowadzania testów wydajnościowych (Gatling) oraz testów E2E (Cypress). Obraz Docker zostanie następnie uruchomiony na maszynie wirtualnej z systemem Linux, w celu wykonania wspomnianych testów.
-Kryteria Akceptacji (AC):
-•	AC1: Piplinie Azure DevOps został utworzony.
-o	CD/CD w Azure DevOps został skonfigurowany i jest widoczny w projekcie.
-o	Nazwa piplinie jest zgodna z przyjętymi standardami nazewnictwa.
-•	AC2: Automatyczne budowanie obrazu Docker zostało zaimplementowane.
-o	CI automatycznie buduje obraz Docker na podstawie Dockerfile znajdującego się w repozytorium kodu.
-o	Obraz Docker zawiera wszystkie niezbędne zależności i konfiguracje dla testów Gatling i Cypress.
-o	Proces budowania jest stabilny i pozbawiony błędów.
-•	AC3: Automatyczne wypychanie obrazu Docker do rejestru kontenerów zostało zaimplementowane.
-o	Zbudowany obraz Docker jest automatycznie wypychany do skonfigurowanego rejestru kontenerów (np. Azure Container Registry).
-o	Weryfikacja dostępności obrazu w rejestrze po pomyślnym zakończeniu etapu push.
-•	AC4: Uruchamianie testów na maszynie wirtualnej Linux zostało zaimplementowane.
-o	CI automatycznie uruchamia obraz Docker na nowej lub istniejącej maszynie wirtualnej Linux.
-o	Testy Gatling i Cypress są wykonywane wewnątrz uruchomionego kontenera.
-o	CI/CD zbiera i prezentuje wyniki wykonanych testów (np. w postaci raportów, logów).
-•	AC5: Zapewniono monitorowanie i raportowanie wyników testów.
-o	Wyniki testów (Gatling i Cypress) są dostępne i łatwe do interpretacji.
-o	W przypadku błędów testowych, CI/CD odpowiednio sygnalizuje niepowodzenie.
-•	AC6: Konfiguracja CI/CD jest wersjonowana w systemie kontroli wersji.
-o	Definicja piplinie (np. plik YAML) jest przechowywana w repozytorium kodu (np. Git) wraz z resztą kodu projektu.
-o	Zmiany w konfiguracji piplinie są śledzone i podlegają kontroli wersji.
+ - script: |
+        echo "Executing 'ls -l' on specified host using Ansible ad-hoc command..."
+        # Adres IP/Nazwa hosta do zalogowania to bezpośrednio wartość parametru hostname
+        # Nazwa użytkownika i hasło są tworzone dynamicznie na podstawie hostname, analogicznie jak na zdjęciu
+        ansible all -i '${{ parameters.hostname }},' \
+          -m ansible.builtin.shell \
+          -a "ls -l" \
+          -e "ansible_user=$({{ parameters.hostname }})-USER ansible_password=$({{ parameters.hostname }})-PASS"
+          # UWAGA: Taki sposób podawania hasła w "extra-vars" w YAML NIE jest bezpieczny.
+          # Dla prawdziwego środowiska, używaj zmiennych Secret w Azure DevOps
+          # lub zadania InstallSSHKey@0.
 
+      displayName: 'Perform ls -l on remote host via Ansible ad-hoc with dynamic creds'
+      condition: succeeded()
