@@ -1,14 +1,33 @@
- - script: |
-        echo "Executing 'ls -l' on specified host using Ansible ad-hoc command..."
-        # Adres IP/Nazwa hosta do zalogowania to bezpośrednio wartość parametru hostname
-        # Nazwa użytkownika i hasło są tworzone dynamicznie na podstawie hostname, analogicznie jak na zdjęciu
+        echo "Executing docker load command on specified host."
+
+        # Upewnij się, że zmienna Build.BuildId z Twojego pipeline'u
+        # zawiera PEŁNĄ nazwę folderu, np. "20037686-md77tvvg".
+        # Jeśli Build.BuildId to tylko "20037686", to musimy znaleźć sposób na resztę nazwy.
+        # Na podstawie Twoich poprzednich zapytań i tego co widać w "CDASContainerScanning@2"
+        # image name: p08399/gatling-test:$(Build.BuildId)
+        # Zakładam, że $(Build.BuildId) jest pełnym unikalnym tagiem/ID.
+        
+        # Nazwa FOLDERU, w którym znajduje się obraz .tar
+        # np. skopeoCopy-gatling-test-20037686-md77tvvg
+        DOCKER_IMAGE_FOLDER_NAME="skopeoCopy-gatling-test-$(Build.BuildId)"
+        
+        # Pełna ścieżka do katalogu, gdzie jest plik .tar
+        # np. /app/docker/images/skopeoCopy-gatling-test-20037686-md77tvvg
+        DOCKER_FULL_PATH="/app/docker/images/${DOCKER_IMAGE_FOLDER_NAME}"
+        
+        # Nazwa pliku .tar wewnątrz folderu
+        # np. gatling-test-20037686.tar
+        DOCKER_TAR_FILE="gatling-test-$(Build.BuildId).tar"
+        
+        # Pełna ścieżka do pliku .tar
+        DOCKER_TAR_FULL_PATH="${DOCKER_FULL_PATH}/${DOCKER_TAR_FILE}"
+
         ansible all -i '${{ parameters.hostname }},' \
           -m ansible.builtin.shell \
-          -a "ls -l" \
-          -e "ansible_user=$({{ parameters.hostname }})-USER ansible_password=$({{ parameters.hostname }})-PASS"
-          # UWAGA: Taki sposób podawania hasła w "extra-vars" w YAML NIE jest bezpieczny.
-          # Dla prawdziwego środowiska, używaj zmiennych Secret w Azure DevOps
-          # lub zadania InstallSSHKey@0.
+          -a "cd ${DOCKER_FULL_PATH} && docker load -i ${DOCKER_TAR_FILE}" \
+          -e "ansible_user: ${{ parameters.hostname }}-USER ansible_password: ${{ parameters.hostname }}-PASS"
+          # Pamiętaj o bezpieczeństwie hasła!
+          # I o definicji parametru hostname z pełnym FQDN/IP.
 
-      displayName: 'Perform ls -l on remote host via Ansible ad-hoc with dynamic creds'
+      displayName: 'Perform docker load on remote host'
       condition: succeeded()
