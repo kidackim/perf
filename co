@@ -1,65 +1,23 @@
-FROM registry.access.redhat.com/ubi9/nodejs-22 AS builder
+Zadanie polega na przygotowaniu i konfiguracji CI/CD (pipeline) w Azure DevOps, który będzie odpowiedzialny za automatyczne budowanie i wypychanie obrazu Docker zawierającego środowisko do przeprowadzania testów wydajnościowych (Gatling) oraz testów E2E (Cypress). Obraz Docker zostanie następnie uruchomiony na maszynie wirtualnej z systemem Linux, w celu wykonania wspomnianych testów.
+Kryteria Akceptacji (AC):
+•	AC1: Piplinie Azure DevOps został utworzony.
+o	CD/CD w Azure DevOps został skonfigurowany i jest widoczny w projekcie.
+o	Nazwa piplinie jest zgodna z przyjętymi standardami nazewnictwa.
+•	AC2: Automatyczne budowanie obrazu Docker zostało zaimplementowane.
+o	CI automatycznie buduje obraz Docker na podstawie Dockerfile znajdującego się w repozytorium kodu.
+o	Obraz Docker zawiera wszystkie niezbędne zależności i konfiguracje dla testów Gatling i Cypress.
+o	Proces budowania jest stabilny i pozbawiony błędów.
+•	AC3: Automatyczne wypychanie obrazu Docker do rejestru kontenerów zostało zaimplementowane.
+o	Zbudowany obraz Docker jest automatycznie wypychany do skonfigurowanego rejestru kontenerów (np. Azure Container Registry).
+o	Weryfikacja dostępności obrazu w rejestrze po pomyślnym zakończeniu etapu push.
+•	AC4: Uruchamianie testów na maszynie wirtualnej Linux zostało zaimplementowane.
+o	CI automatycznie uruchamia obraz Docker na nowej lub istniejącej maszynie wirtualnej Linux.
+o	Testy Gatling i Cypress są wykonywane wewnątrz uruchomionego kontenera.
+o	CI/CD zbiera i prezentuje wyniki wykonanych testów (np. w postaci raportów, logów).
+•	AC5: Zapewniono monitorowanie i raportowanie wyników testów.
+o	Wyniki testów (Gatling i Cypress) są dostępne i łatwe do interpretacji.
+o	W przypadku błędów testowych, CI/CD odpowiednio sygnalizuje niepowodzenie.
+•	AC6: Konfiguracja CI/CD jest wersjonowana w systemie kontroli wersji.
+o	Definicja piplinie (np. plik YAML) jest przechowywana w repozytorium kodu (np. Git) wraz z resztą kodu projektu.
+o	Zmiany w konfiguracji piplinie są śledzone i podlegają kontroli wersji.
 
-ARG MICRODIR=/microdir
-ARG PIP_ROOT_USER_ACTION=ignore
-ARG LANG=en_US.UTF-8
-ARG LANGUAGE=en_US.UTF-8
-ARG LC_COLLATE=C
-ARG LC_CTYPE=en_US.UTF-8
-ARG NLS_OS_CHARSET=AL32UTF8
-ARG USE_GKE_GCLOUD_AUTH_PLUGIN=True
-
-LABEL maintainer="ci.coding.pl"
-
-ENV PIP_ROOT_USER_ACTION=${PIP_ROOT_USER_ACTION} \
-    LANG=${LANG} \
-    LANGUAGE=${LANGUAGE} \
-    LC_COLLATE=${LC_COLLATE} \
-    LC_CTYPE=${LC_CTYPE} \
-    NLS_OS_CHARSET=${NLS_OS_CHARSET} \
-    USE_GKE_GCLOUD_AUTH_PLUGIN=${USE_GKE_GCLOUD_AUTH_PLUGIN} \
-    NODE_TLS_REJECT_UNAUTHORIZED=0
-
-WORKDIR /opt/app-root/src
-
-USER root
-
-# Aktualizuj pakiety i instaluj narzędzia potrzebne TYLKO DO BUDOWANIA lub npm install
-RUN dnf update -y && \
-    dnf install -y git sqlite && \
-    dnf clean all && rm -rf /var/cache/dnf/
-
-COPY package*.json ./
-RUN npm config set strict-ssl false && \
-    npm install --unsafe-perm
-
-COPY . .
-COPY sample.env .env
-
-# --- ETAP 2: OSTATECZNY OBRAZ (MINIMALNY) ---
-FROM registry.access.redhat.com/ubi9/ubi-minimal
-
-ENV NODE_TLS_REJECT_UNAUTHORIZED=0
-
-USER root
-
-# Instalacja Node.js i npm w obrazie minimalnym
-RUN dnf update -y && \
-    dnf module enable nodejs:22 -y && \
-    dnf install -y nodejs && \
-    dnf clean all && rm -rf /var/cache/dnf/*
-
-RUN mkdir -p /app && \
-    chown 1001:0 /app
-
-USER 1001
-
-WORKDIR /app
-
-# Skopiuj TYLKO niezbędne pliki z etapu budowania
-COPY --from=builder /opt/app-root/src/node_modules ./node_modules
-COPY --from=builder /opt/app-root/src/package*.json ./
-COPY --from=builder /opt/app-root/src/sample.env ./sample.env
-COPY --from=builder /opt/app-root/src/ .
-
-CMD ["/bin/sh", "-c", "npm run test"]
