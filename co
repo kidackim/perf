@@ -1,7 +1,7 @@
 # Dockerfile
 
-# Stage 1: Builder - Bazujemy na ubi8-minimal
-FROM registry.access.redhat.com/ubi8/ubi8-minimal AS builder
+# Stage 1: Builder (bez zmian - tutaj instalujemy Node.js)
+FROM registry.access.redhat.com/ubi9-minimal AS builder
 
 USER root
 RUN microdnf update -y && \
@@ -49,25 +49,32 @@ COPY package*.json ./
 RUN npm config set strict-ssl false && \
     npm install --unsafe-perm
 
-# === NOWY KROK DIAGNOSTYCZNY w BUILDERZE ===
-# Sprawdzamy, czy node_modules istnieje i gdzie jesteśmy
+# Nowy krok diagnostyczny (możesz go zostawić tymczasowo, potem usunąć)
 RUN echo "--- DIAGNOSTYCZNY KROK PO npm install ---" && \
     ls -lha node_modules && \
     echo "Current working directory: $(pwd)" && \
     ls -lha /opt/app-root/src/node_modules || echo "node_modules not found at /opt/app-root/src/node_modules"
-# === KONIEC KROKU DIAGNOSTYCZNEGO ===
 
-COPY . . # To COPY powinno być po instalacji zależności
+COPY . .
 
 # Stage 2: Final - minimalny obraz do uruchomienia aplikacji
-FROM registry.access.redhat.com/ubi8/ubi8-micro:latest AS final # <--- Zmieniono na ubi8-micro
+FROM registry.access.redhat.com/ubi9-micro:latest AS final
 
 USER root
 RUN mkdir -p /app && \
     chown 1001:0 /app
-ENV PATH="/usr/local/bin:${PATH}"
+
+# === KLUCZOWA ZMIANA: KOPIOWANIE CAŁEGO ŚRODOWISKA NODE.JS ===
+# Kopiujemy całą instalację Node.js z /usr/local z etapu builder
+COPY --from=builder /usr/local/ /usr/local/
+# =============================================================
+
+# PATH jest teraz poprawnie ustawiony dla /usr/local/bin
+ENV PATH="/usr/local/bin:${PATH}" 
+
 USER 1001
 WORKDIR /app
+
 COPY --from=builder /opt/app-root/src/node_modules ./node_modules
 COPY --from=builder /opt/app-root/src/package.json .
 COPY --from=builder /opt/app-root/src/sample.env .sample.env
