@@ -1,28 +1,23 @@
 # Dockerfile
 
-# Stage 1: Builder - Bazujemy na ubi9-minimal
+# Stage 1: Builder
 FROM registry.access.redhat.com/ubi9-minimal AS builder
 
 USER root
-
-# Instalacja niezbędnych narzędzi systemowych, W TYM 'ca-certificates' I 'xz'
 RUN microdnf update -y && \
     microdnf install -y \
     tar gzip \
-    xz \ # <<< DODANO: Pakiet do dekompresji .xz
+    xz \
     gcc gcc-c++ make automake autoconf libtool glibc-devel libstdc++-devel \
     git sqlite \
     ca-certificates \
     && microdnf clean all && rm -rf /var/cache/yum/*
 
-# Definicja wersji Node.js do zainstalowania
 ARG NODE_VERSION=18.20.1 
 
-# Flagi kompilatora dla kompatybilności z CPU
 ENV CFLAGS="-march=x86-64 -mtune=generic" \
     CXXFLAGS="-march=x86-64 -mtune=generic"
 
-# Argumenty i Etykiety z Twojego oryginalnego Dockerfile
 ARG MICRODIR=/microdir
 ARG PIP_ROOT_USER_ACTION=ignore
 ARG LANG=en_US.UTF-8
@@ -34,7 +29,6 @@ ARG USE_GCLOUD_AUTH_PLUGIN=True
 
 LABEL maintainer="ci.coding.pl"
 
-# Ustawienie zmiennych środowiskowych
 ENV PIP_ROOT_USER_ACTION=${PIP_ROOT_USER_ACTION} \
     LANG=${LANG} \
     LANGUAGE=${LANGUAGE} \
@@ -44,45 +38,44 @@ ENV PIP_ROOT_USER_ACTION=${PIP_ROOT_USER_ACTION} \
     NODE_TLS_REJECT_UNAUTHORIZED=0
 
 # === Ręczna instalacja Node.js ===
-# Tymczasowe obejście dla problemu SSL: '-k' lub '--insecure' w curl
-# Użyj TYLKO jeśli problem SSL nadal występuje po dodaniu ca-certificates
-RUN curl -sSLk "https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-x64.tar.xz" \
-# LUB BEZ '-k' JESLI LICZYSZ NA ROZWIĄZANIE PROBLEMU SSL PRZEZ 'ca-certificates'
-# RUN curl -sSL "https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-x64.tar.xz" \
+# Upewnij się, że ten krok faktycznie działa w logach budowania!
+RUN curl -sSL "https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-x64.tar.xz" \
     | tar -xJC /usr/local --strip-components=1 && \
     chmod -R 755 /usr/local/bin/node /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/corepack
 
-# Ustawienie katalogu roboczego dla kodu aplikacji
+# === NOWY KROK DIAGNOSTYCZNY w BUILDERZE ===
+# Sprawdź, czy node i npm są dostępne w PATH i działają
+RUN ls -l /usr/local/bin/node /usr/local/bin/npm && \
+    /usr/local/bin/node -v && \
+    /usr/local/bin/npm -v && \
+    node -v && \
+    npm -v && \
+    echo $PATH
+# === KONIEC NOWEGO KROKU DIAGNOSTYCZNEGO ===
+
 WORKDIR /opt/app-root/src
 
-# Skopiowanie plików package.json i package-lock.json (lub yarn.lock)
 COPY package*.json ./
 
-# Instalacja zależności Node.js
 RUN npm config set strict-ssl false && \
     npm install --unsafe-perm
 
-# Skopiowanie pozostałego kodu źródłowego aplikacji
 COPY . .
 
-# Stage 2: Final - minimalny obraz do uruchomienia aplikacji
+# Stage 2: Final
 FROM registry.access.redhat.com/ubi9-micro:latest AS final
 
-# Ustawienie użytkownika i katalogu aplikacji
 USER root
 RUN mkdir -p /app && chown 1001:0 /app
 USER 1001
 
 WORKDIR /app
 
-# Kopiowanie zbudowanych artefaktów i zależności z etapu 'builder'
 COPY --from=builder /opt/app-root/src/node_modules ./node_modules
 COPY --from=builder /opt/app-root/src/package.json .
 COPY --from=builder /opt/app-root/src/sample.env .sample.env
 COPY --from=builder /opt/app-root/src/. .
 
-# Wystawienie portu, na którym nasłuchuje aplikacja
 EXPOSE 3000
 
-# Komenda uruchomienia aplikacji
 CMD ["/bin/bash", "-c", "npm run test"]
