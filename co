@@ -1,4 +1,4 @@
-FROM registry.access.redhat.com/ubi9-minimal AS builder
+FROM registry.access.redhat.com/ubi8-minimal AS builder
 USER root
 RUN microdnf update -y && \
     microdnf install -y \
@@ -37,7 +37,16 @@ RUN curl -sSLk "https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-l
     | tar -xJC /usr/local --strip-components=1 && \
     chmod -R 755 /usr/local/bin/node /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/corepack
 
-FROM registry.access.redhat.com/ubi9-micro:latest AS final
+WORKDIR /opt/app-root/src
+
+COPY package*.json ./
+
+RUN npm config set strict-ssl false && \
+    npm install --unsafe-perm
+
+COPY . .
+
+FROM registry.access.redhat.com/ubi8-micro:latest AS final
 USER root
 RUN mkdir -p /app && \
     chown 1001:0 /app
