@@ -1,4 +1,8 @@
-FROM registry.access.redhat.com/ubi8-minimal AS builder
+# Dockerfile
+
+# Stage 1: Builder - Bazujemy na ubi8-minimal
+FROM registry.access.redhat.com/ubi8/ubi8-minimal AS builder
+
 USER root
 RUN microdnf update -y && \
     microdnf install -y \
@@ -9,7 +13,8 @@ RUN microdnf update -y && \
     ca-certificates \
     openssl \
     && microdnf clean all && rm -rf /var/cache/yum/*
-ARG NODE_VERSION=18.20.1
+
+ARG NODE_VERSION=18.20.1 
 
 ENV CFLAGS="-march=x86-64 -mtune=generic" \
     CXXFLAGS="-march=x86-64 -mtune=generic"
@@ -44,9 +49,19 @@ COPY package*.json ./
 RUN npm config set strict-ssl false && \
     npm install --unsafe-perm
 
-COPY . .
+# === NOWY KROK DIAGNOSTYCZNY w BUILDERZE ===
+# Sprawdzamy, czy node_modules istnieje i gdzie jesteśmy
+RUN echo "--- DIAGNOSTYCZNY KROK PO npm install ---" && \
+    ls -lha node_modules && \
+    echo "Current working directory: $(pwd)" && \
+    ls -lha /opt/app-root/src/node_modules || echo "node_modules not found at /opt/app-root/src/node_modules"
+# === KONIEC KROKU DIAGNOSTYCZNEGO ===
 
-FROM registry.access.redhat.com/ubi8-micro:latest AS final
+COPY . . # To COPY powinno być po instalacji zależności
+
+# Stage 2: Final - minimalny obraz do uruchomienia aplikacji
+FROM registry.access.redhat.com/ubi8/ubi8-micro:latest AS final # <--- Zmieniono na ubi8-micro
+
 USER root
 RUN mkdir -p /app && \
     chown 1001:0 /app
