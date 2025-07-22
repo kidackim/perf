@@ -1,2 +1,64 @@
-ENV CFLAGS="-march=x86-64 -mtune=generic"
-ENV CXXFLAGS="-march=x86-64 -mtune=generic"
+# Stage 1: nodejs_builder - ten etap kompiluje Node.js ze źródeł
+FROM registry.access.redhat.com/ubi8/ubi-minimal AS nodejs_builder
+
+# Zmienna definiująca wersję Node.js do skompilowania
+ARG NODE_VERSION=18.19.1
+# Ustawienie ścieżki, aby narzędzia budowania Node.js były dostępne
+ENV PATH="/usr/local/bin:/usr/local/sbin:/usr/bin:/usr/sbin:/bin:/sbin"
+
+# Instalacja zależności potrzebnych do kompilacji Node.js i ewentualnych natywnych modułów aplikacji
+RUN microdnf update \
+    && microdnf install -y \
+        gcc-c++ \
+        make \
+        python3 \
+        git \
+        curl \
+        xz \
+    && microdnf clean all
+
+# Pobieranie, rozpakowywanie, konfiguracja i kompilacja Node.js
+# === KLUCZOWE: Flagi CFLAGS/CXXFLAGS są tutaj przekazywane do kompilatora ===
+RUN curl -sL "https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}.tar.xz" | tar -xJ \
+    && cd node-v${NODE_VERSION} \
+    && CFLAGS="-march=x86-64 -mtune=generic" \
+       CXXFLAGS="-march=x86-64 -mtune=generic" \
+       ./configure --prefix=/usr/local --shared-libuv --shared-zlib \
+    && make -j$(nproc) \
+    && make install \
+    && cd .. \
+    && rm -rf node-v${NODE_VERSION}* \
+    # Usuń narzędzia kompilacji po kompilacji Node.js, aby zmniejszyć rozmiar etapu
+    && microdnf remove -y gcc-c++ make python3 git curl xz \
+    && microdnf clean all
+
+# Skopiuj pliki package.json i package-lock.json (lub yarn.lock)
+# Zainstaluj zależności aplikacji w etapie budowania, aby natywne moduły też były kompilowane z flagami
+WORKDIR /app
+COPY package*.json ./
+RUN npm install --production
+
+# Stage 2: final - finalny obraz uruchomieniowy, minimalny
+FROM registry.access.redhat.com/ubi8/ubi-minimal AS final
+
+# Skopiuj skompilowany runtime Node.js z etapu nodejs_builder
+COPY --from=nodejs_builder /usr/local /usr/local
+# Skopiuj zainstalowane zależności npm (node_modules) z etapu nodejs_builder
+COPY --from=nodejs_builder /app/node_modules /app/node_modules
+
+# Ustaw ścieżkę dla binariów Node.js
+ENV PATH="/usr/local/bin:$PATH"
+
+# Ustaw katalog roboczy dla aplikacji
+WORKDIR /app
+
+# Skopiuj resztę kodu aplikacji
+# (Upewnij się, że .dockerignore poprawnie ignoruje node_modules i inne zbędne pliki)
+COPY . .
+
+# Wystaw port(y), na którym nasłuchuje Twoja aplikacja Node.js
+EXPOSE 3000
+
+# Komenda uruchamiająca aplikację
+CMD ["node", "index.js"]
+# Zastąp 'index.js' swoim głównym plikiem wejściowym
