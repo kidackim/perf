@@ -1,64 +1,83 @@
-# Stage 1: nodejs_builder - ten etap kompiluje Node.js ze źródeł
-FROM registry.access.redhat.com/ubi8/ubi-minimal AS nodejs_builder
+# Stage 1: Builder - Bazujemy na ubi9-minimal
+# Będziemy ręcznie instalować Node.js
+FROM registry.access.redhat.com/ubi9-minimal AS builder
 
-# Zmienna definiująca wersję Node.js do skompilowania
-ARG NODE_VERSION=18.19.1
-# Ustawienie ścieżki, aby narzędzia budowania Node.js były dostępne
-ENV PATH="/usr/local/bin:/usr/local/sbin:/usr/bin:/usr/sbin:/bin:/sbin"
+# Ustaw użytkownika na root, aby móc instalować pakiety i Node.js
+USER root
 
-# Instalacja zależności potrzebnych do kompilacji Node.js i ewentualnych natywnych modułów aplikacji
-RUN microdnf update \
-    && microdnf install -y \
-        gcc-c++ \
-        make \
-        python3 \
-        git \
-        curl \
-        xz \
-    && microdnf clean all
+# Instalacja niezbędnych narzędzi systemowych
+# Zmieniono 'build-essential' na konkretne pakiety dla RHEL/UBI
+RUN microdnf update -y && \
+    microdnf install -y \
+    curl tar gzip \
+    gcc gcc-c++ make automake autoconf libtool glibc-devel libstdc++-devel \
+    git sqlite \
+    && microdnf clean all && rm -rf /var/cache/yum/*
 
-# Pobieranie, rozpakowywanie, konfiguracja i kompilacja Node.js
-# === KLUCZOWE: Flagi CFLAGS/CXXFLAGS są tutaj przekazywane do kompilatora ===
-RUN curl -sL "https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}.tar.xz" | tar -xJ \
-    && cd node-v${NODE_VERSION} \
-    && CFLAGS="-march=x86-64 -mtune=generic" \
-       CXXFLAGS="-march=x86-64 -mtune=generic" \
-       ./configure --prefix=/usr/local --shared-libuv --shared-zlib \
-    && make -j$(nproc) \
-    && make install \
-    && cd .. \
-    && rm -rf node-v${NODE_VERSION}* \
-    # Usuń narzędzia kompilacji po kompilacji Node.js, aby zmniejszyć rozmiar etapu
-    && microdnf remove -y gcc-c++ make python3 git curl xz \
-    && microdnf clean all
+# Definicja wersji Node.js do zainstalowania
+ARG NODE_VERSION=18.20.1 
 
-# Skopiuj pliki package.json i package-lock.json (lub yarn.lock)
-# Zainstaluj zależności aplikacji w etapie budowania, aby natywne moduły też były kompilowane z flagami
-WORKDIR /app
+# Flagi kompilatora dla kompatybilności z CPU
+ENV CFLAGS="-march=x86-64 -mtune=generic" \
+    CXXFLAGS="-march=x86-64 -mtune=generic"
+
+# Argumenty i Etykiety z Twojego oryginalnego Dockerfile
+ARG MICRODIR=/microdir
+ARG PIP_ROOT_USER_ACTION=ignore
+ARG LANG=en_US.UTF-8
+ARG LANGUAGE=en_US.UTF-8
+ARG LC_COLLATE=C
+ARG LC_CTYPE=en_US.UTF-8
+ARG NLS_OS_CHARSET=AL32UTF8
+ARG USE_GCLOUD_AUTH_PLUGIN=True
+
+LABEL maintainer="ci.coding.pl"
+
+# Ustawienie zmiennych środowiskowych
+ENV PIP_ROOT_USER_ACTION=${PIP_ROOT_USER_ACTION} \
+    LANG=${LANG} \
+    LANGUAGE=${LANGUAGE} \
+    LC_COLLATE=${LC_COLLATE} \
+    LC_CTYPE=${LC_CTYPE} \
+    NLS_OS_CHARSET=${NLS_OS_CHARSET} \
+    NODE_TLS_REJECT_UNAUTHORIZED=0
+
+# === Ręczna instalacja Node.js ===
+RUN curl -sSL "https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-x64.tar.xz" \
+    | tar -xJC /usr/local --strip-components=1 && \
+    chmod -R 755 /usr/local/bin/node /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/corepack
+
+# Ustawienie katalogu roboczego dla kodu aplikacji
+WORKDIR /opt/app-root/src
+
+# Skopiowanie plików package.json i package-lock.json (lub yarn.lock)
 COPY package*.json ./
-RUN npm install --production
 
-# Stage 2: final - finalny obraz uruchomieniowy, minimalny
-FROM registry.access.redhat.com/ubi8/ubi-minimal AS final
+# Instalacja zależności Node.js
+RUN npm config set strict-ssl false && \
+    npm install --unsafe-perm
 
-# Skopiuj skompilowany runtime Node.js z etapu nodejs_builder
-COPY --from=nodejs_builder /usr/local /usr/local
-# Skopiuj zainstalowane zależności npm (node_modules) z etapu nodejs_builder
-COPY --from=nodejs_builder /app/node_modules /app/node_modules
-
-# Ustaw ścieżkę dla binariów Node.js
-ENV PATH="/usr/local/bin:$PATH"
-
-# Ustaw katalog roboczy dla aplikacji
-WORKDIR /app
-
-# Skopiuj resztę kodu aplikacji
-# (Upewnij się, że .dockerignore poprawnie ignoruje node_modules i inne zbędne pliki)
+# Skopiowanie pozostałego kodu źródłowego aplikacji
 COPY . .
 
-# Wystaw port(y), na którym nasłuchuje Twoja aplikacja Node.js
+# Stage 2: Final - minimalny obraz do uruchomienia aplikacji
+FROM registry.access.redhat.com/ubi9-micro:latest AS final
+
+# Ustawienie użytkownika i katalogu aplikacji
+USER root
+RUN mkdir -p /app && chown 1001:0 /app
+USER 1001
+
+WORKDIR /app
+
+# Kopiowanie zbudowanych artefaktów i zależności z etapu 'builder'
+COPY --from=builder /opt/app-root/src/node_modules ./node_modules
+COPY --from=builder /opt/app-root/src/package.json .
+COPY --from=builder /opt/app-root/src/sample.env .sample.env
+COPY --from=builder /opt/app-root/src/. .
+
+# Wystawienie portu, na którym nasłuchuje aplikacja
 EXPOSE 3000
 
-# Komenda uruchamiająca aplikację
-CMD ["node", "index.js"]
-# Zastąp 'index.js' swoim głównym plikiem wejściowym
+# Komenda uruchomienia aplikacji
+CMD ["/bin/bash", "-c", "npm run test"]
