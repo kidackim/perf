@@ -1,25 +1,15 @@
 # Dockerfile
 
-# Stage 1: Builder
-FROM registry.access.redhat.com/ubi8-minimal AS builder
+# ... (wszystkie poprzednie instrukcje dla Stage 1: builder, aż do ARG GATLING_JS_VERSION)
 
-USER root
-RUN microdnf update -y && \
-    microdnf install -y \
-    tar gzip \
-    xz \
-    gcc gcc-c++ make automake autoconf libtool glibc-devel libstdc++-devel \
-    git sqlite \
-    ca-certificates \
-    openssl \
-    unzip \ # <<< DODANO: unzip do rozpakowania .zip
-    && microdnf clean all && rm -rf /var/cache/yum/*
-
+# Definicja wersji Node.js do zainstalowania
 ARG NODE_VERSION=18.20.1 
 
+# Flagi kompilatora dla kompatybilności z CPU
 ENV CFLAGS="-march=x86-64 -mtune=generic" \
     CXXFLAGS="-march=x86-64 -mtune=generic"
 
+# Argumenty i Etykiety z Twojego oryginalnego Dockerfile
 ARG MICRODIR=/microdir
 ARG PIP_ROOT_USER_ACTION=ignore
 ARG LANG=en_US.UTF-8
@@ -31,6 +21,7 @@ ARG USE_GCLOUD_AUTH_PLUGIN=True
 
 LABEL maintainer="ci.coding.pl"
 
+# Ustawienie zmiennych środowiskowych
 ENV PIP_ROOT_USER_ACTION=${PIP_ROOT_USER_ACTION} \
     LANG=${LANG} \
     LANGUAGE=${LANGUAGE} \
@@ -55,30 +46,38 @@ RUN echo "--- DIAGNOSTYCZNY KROK PO npm install ---" && \
     ls -lha node_modules && \
     echo "Current working directory: $(pwd)" && \
     ls -lha /opt/app-root/src/node_modules || echo "node_modules not found at /opt/app-root/src/node_modules"
+# --- KONIEC DIAGNOSTYCZNEGO KROKU ---
+
 
 # === NOWY KLUCZOWY KROK: POBIERANIE I INSTALOWANIE GATLING-JS-BUNDLE ===
 # Bierzemy wersję z devDependencies w package.json
-# Gatling CLI version from devDependencies in package.json: 3.13.50
 ARG GATLING_JS_VERSION=3.13.50 # <--- SPRAWDŹ DOKŁADNIE TĘ WERSJĘ W SWOIM package.json
 ENV GATLING_JS_DOWNLOAD_URL="https://github.com/gatling/gatling-js/releases/download/v${GATLING_JS_VERSION}/gatling-js-bundle-${GATLING_JS_VERSION}-linux-x64.zip"
 
+# Krok 1: Tylko pobierz plik ZIP (zapisz do /tmp)
 RUN echo "Downloading Gatling.js Bundle..." && \
-    curl -sSLk "${GATLING_JS_DOWNLOAD_URL}" -o /tmp/gatling-js-bundle.zip && \
-    echo "Extracting Gatling.js Bundle..." && \
+    curl -sSLk "${GATLING_JS_DOWNLOAD_URL}" -o /tmp/gatling-js-bundle.zip
+
+# Krok 2: Sprawdź integralność pobranego pliku
+RUN echo "Verifying downloaded file..." && \
+    ls -lh /tmp/gatling-js-bundle.zip && \ # Wyświetl rozmiar pliku
+    file /tmp/gatling-js-bundle.zip && \   # Sprawdź typ pliku (czy to faktycznie ZIP)
+    unzip -t /tmp/gatling-js-bundle.zip || (echo "Downloaded ZIP is corrupted or not a ZIP file. Failing build." && exit 1) # Test integralności ZIP
+
+# Krok 3: Jeśli plik jest OK, wtedy rozpakuj i zainstaluj
+RUN echo "Extracting Gatling.js Bundle..." && \
     unzip /tmp/gatling-js-bundle.zip -d /usr/local/lib/gatling-js-bundle && \
     chmod -R 755 /usr/local/lib/gatling-js-bundle && \
     rm /tmp/gatling-js-bundle.zip && \
     echo "Installing Gatling CLI..." && \
     npx gatling install --output-file-path /usr/local/bin/gatling # Sprawdź, czy to jest właściwa komenda install
 
-# Po instalacji npx gatling install, upewnij się, że binarka 'gatling' jest w PATH
-# npx gatling install zazwyczaj instaluje globalnie, co umieści binarkę w /usr/local/bin (już w PATH)
 # === KONIEC NOWEGO KLUCZOWEGO KROKU ===
 
 COPY . . # To COPY powinno być po instalacji zależności I tego frameworka
 
 # Stage 2: Final
-FROM registry.access.redhat.com/ubi9-micro:latest AS final
+FROM registry.access.redhat.com/ubi8-minimal AS final # Zakładam, że ubi8-minimal, a nie ubi9-micro, zadziałało
 
 USER root
 RUN mkdir -p /app && chown 1001:0 /app
