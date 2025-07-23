@@ -1,11 +1,11 @@
 # Dockerfile
 
-# Stage 1: Builder (bez zmian w instalacji Node.js)
+# Stage 1: Builder - Pobieranie Gatling.js ZIP i instalacja Node.js/npm zależności
 FROM registry.access.redhat.com/ubi8-minimal AS builder
 
 USER root
-# Instalacja narzędzi potrzebnych do Node.js (ręczna instalacja)
-# oraz zależności kompilatorów dla npm install
+# Install build tools for Node.js native modules and system tools needed for building
+# ORAZ narzędzia do POBIERANIA Gatling.js ZIP (curl, tar, gzip, xz)
 RUN microdnf update -y && \
     microdnf install -y \
     tar gzip \
@@ -14,13 +14,19 @@ RUN microdnf update -y && \
     git sqlite \
     ca-certificates \
     openssl \
-    # Usunięto 'unzip' z tej listy, skoro npx gatling install sam to robi
+    curl \
+    # Usunieto 'unzip' z tej listy, ponieważ npx gatling install ma go wbudowanego i nie potrzebujemy go jawnie
     && microdnf clean all && rm -rf /var/cache/yum/*
 
+# Node.js core installation
 ARG NODE_VERSION=18.20.1 
 ENV CFLAGS="-march=x86-64 -mtune=generic" \
     CXXFLAGS="-march=x86-64 -mtune=generic"
+RUN curl -sSLk "https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-x64.tar.xz" \
+    | tar -xJC /usr/local --strip-components=1 && \
+    chmod -R 755 /usr/local/bin/node /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/corepack
 
+# Argumenty i Etykiety
 ARG MICRODIR=/microdir
 ARG PIP_ROOT_USER_ACTION=ignore
 ARG LANG=en_US.UTF-8
@@ -32,6 +38,7 @@ ARG USE_GCLOUD_AUTH_PLUGIN=True
 
 LABEL maintainer="ci.coding.pl"
 
+# Ustawienie zmiennych środowiskowych
 ENV PIP_ROOT_USER_ACTION=${PIP_ROOT_USER_ACTION} \
     LANG=${LANG} \
     LANGUAGE=${LANGUAGE} \
@@ -40,53 +47,49 @@ ENV PIP_ROOT_USER_ACTION=${PIP_ROOT_USER_ACTION} \
     NLS_OS_CHARSET=${NLS_OS_CHARSET} \
     NODE_TLS_REJECT_UNAUTHORIZED=0
 
-RUN curl -sSLk "https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-x64.tar.xz" \
-    | tar -xJC /usr/local --strip-components=1 && \
-    chmod -R 755 /usr/local/bin/node /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/corepack
-
 WORKDIR /opt/app-root/src
-
 COPY package*.json ./
+RUN npm config set strict-ssl false && npm install --unsafe-perm
 
-RUN npm config set strict-ssl false && \
-    npm install --unsafe-perm
+# === KLUCZOWY KROK: Pobieranie Gatling.js ZIP w etapie BUILDER ===
+ARG GATLING_JS_VERSION=3.13.50 # <--- SPRAWDŹ DOKŁADNIE TĘ WERSJĘ W SWOIM package.json
+ENV GATLING_JS_DOWNLOAD_URL="https://github.com/gatling/gatling-js/releases/download/v${GATLING_JS_VERSION}/gatling-js-bundle-${GATLING_JS_VERSION}-linux-x64.zip"
+ENV GATLING_JS_ZIP_PATH="/tmp/gatling-js-bundle.zip" # Ścieżka do ZIPa w builderze
 
-# Stage 2: Final
+RUN echo "Downloading Gatling.js Bundle..." && \
+    curl -sSLk "${GATLING_JS_DOWNLOAD_URL}" -o "${GATLING_JS_ZIP_PATH}" && \
+    echo "Gatling.js bundle downloaded to ${GATLING_JS_ZIP_PATH}"
+# === KONIEC KLUCZOWEGO KROKU ===
+
+COPY . .
+
+# Stage 2: Final - Instalacja Gatling.js z ZIP-a, następnie kopiowanie kodu aplikacji
 FROM registry.access.redhat.com/ubi8-minimal AS final
 
 USER root
 RUN mkdir -p /app && chown 1001:0 /app
 
-# Kopiowanie Node.js i bibliotek runtime
+# Kopiowanie Node.js core z buildera (zawiera npx)
 COPY --from=builder /usr/local/ /usr/local/
+# Kopiowanie niezbędnych bibliotek C++ runtime z buildera
 COPY --from=builder /usr/lib64/libstdc++.so.6 /usr/lib64/
 COPY --from=builder /usr/lib64/libgcc_s.so.1 /usr/lib64/
 
-# Instalacja narzędzi potrzebnych TYLKO DLA GATLING.JS W ETAPIE FINAL
-# Usunięto 'unzip' i 'file' z tej listy
-RUN microdnf update -y && \
-    microdnf install -y \
-    curl tar gzip xz \
-    ca-certificates openssl \
-    libstdc++-devel libgcc_s \
-    && microdnf clean all && rm -rf /var/cache/yum/*
+# === USUNIĘTO: Blok microdnf install z etapu final, skoro nie jest potrzebny ===
+# (Jeśli Twoje testy pokazują, że działa bez niego)
+# === KONIEC USUNIĘCIA ===
 
+# Kopiowanie pobranego pliku ZIP Gatling.js z buildera do final
+COPY --from=builder "${GATLING_JS_ZIP_PATH}" "${GATLING_JS_ZIP_PATH}"
+
+# Ustawienie PATH (Node.js binarki są już skopiowane, więc npx jest dostępne)
 ENV PATH="/usr/local/bin:${PATH}" 
 
-# === KLUCZOWY KROK: POBIERANIE I INSTALOWANIE GATLING-JS-BUNDLE (W ETAPIE FINAL) ===
-# Ten krok TERAZ BEZ JAŚNEGO UNZIP
-ARG GATLING_JS_VERSION=3.13.50 # <--- SPRAWDŹ DOKŁADNIE TĘ WERSJĘ W SWOIM package.json
-ENV GATLING_JS_DOWNLOAD_URL="https://github.com/gatling/gatling-js/releases/download/v${GATLING_JS_VERSION}/gatling-js-bundle-${GATLING_JS_VERSION}-linux-x64.zip"
-ENV GATLING_JS_ZIP_PATH="/tmp/gatling-js-bundle.zip" # Definiujemy ścieżkę do ZIPa
-
-# Jedna komenda RUN dla pobierania i instalacji
-RUN echo "Downloading Gatling.js Bundle..." && \
-    curl -sSLk "${GATLING_JS_DOWNLOAD_URL}" -o "${GATLING_JS_ZIP_PATH}" && \
-    echo "Installing Gatling CLI using npx gatling install..." && \
+# === KLUCZOWY KROK: INSTALOWANIE Gatling.js Bundle z ZIP-a (W ETAPIE FINAL) ===
+RUN echo "Installing Gatling CLI using npx gatling install..." && \
     npx gatling install "${GATLING_JS_ZIP_PATH}" && \
     rm "${GATLING_JS_ZIP_PATH}" # Usunięcie tymczasowego pliku ZIP po instalacji
-
-# === KONIEC NOWEGO KROKU ===
+# === KONIEC KLUCZOWEGO KROKU ===
 
 USER 1001
 WORKDIR /app
