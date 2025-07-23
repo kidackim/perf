@@ -1,4 +1,123 @@
-RUN mkdir -p /home/1001 && \
-    chown 1001:0 /home/1001 && \
-    chmod 755 /home/1001
-ENV HOME="/home/1001" # Ustaw zmienną HOME
+# Dockerfile
+
+# Stage 1: Builder
+FROM registry.access.redhat.com/ubi8-minimal AS builder
+
+USER root
+RUN microdnf update -y && \
+    microdnf install -y \
+    tar gzip \
+    xz \
+    gcc gcc-c++ make automake autoconf libtool glibc-devel libstdc++-devel \
+    git sqlite \
+    ca-certificates \
+    openssl \
+    unzip \
+    && microdnf clean all && rm -rf /var/cache/yum/*
+
+ARG NODE_VERSION=18.20.1 
+
+ENV CFLAGS="-march=x86-64 -mtune=generic" \
+    CXXFLAGS="-march=x86-64 -mtune=generic"
+
+ARG MICRODIR=/microdir
+ARG PIP_ROOT_USER_ACTION=ignore
+ARG LANG=en_US.UTF-8
+ARG LANGUAGE=en_US.UTF-8
+ARG LC_COLLATE=C
+ARG LC_CTYPE=en_US.UTF-8
+ARG NLS_OS_CHARSET=AL32UTF8
+ARG USE_GCLOUD_AUTH_PLUGIN=True
+
+LABEL maintainer="ci.coding.pl"
+
+ENV PIP_ROOT_USER_ACTION=${PIP_ROOT_USER_ACTION} \
+    LANG=${LANG} \
+    LANGUAGE=${LANGUAGE} \
+    LC_COLLATE=${LC_COLLATE} \
+    LC_CTYPE=${LC_CTYPE} \
+    NLS_OS_CHARSET=${NLS_OS_CHARSET} \
+    NODE_TLS_REJECT_UNAUTHORIZED=0
+
+ARG GATLING_JS_VERSION=3.13.50
+ENV GATLING_JS_DOWNLOAD_URL="https://github.com/gatling/gatling-js/releases/download/v${GATLING_JS_VERSION}/gatling-js-bundle-${GATLING_JS_VERSION}-linux-x64.zip"
+ENV GATLING_JS_ZIP_PATH_BUILDER="/tmp/gatling-js-bundle.zip"
+
+RUN curl -sSLk "https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-x64.tar.xz" \
+    | tar -xJC /usr/local --strip-components=1 && \
+    chmod -R 755 /usr/local/bin/node /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/corepack
+
+WORKDIR /opt/app-root/src
+
+COPY package*.json ./
+
+RUN npm config set strict-ssl false && \
+    npm install --unsafe-perm
+
+# Nowy krok diagnostyczny (możesz go zostawić tymczasowo, potem usunąć)
+RUN echo "--- DIAGNOSTYCZNY KROK PO npm install ---" && \
+    ls -lha node_modules && \
+    echo "Current working directory: $(pwd)" && \
+    ls -lha /opt/app-root/src/node_modules || echo "node_modules not found at /opt/app-root/src/node_modules"
+
+
+RUN echo "Downloading Gatling.js Bundle in builder..." && \
+    curl -sSLk "${GATLING_JS_DOWNLOAD_URL}" -o "${GATLING_JS_ZIP_PATH_BUILDER}"
+
+COPY . .
+
+# Stage 2: Final
+FROM registry.access.redhat.com/ubi8-minimal AS final 
+
+USER root
+RUN mkdir -p /app /home/1001 && \
+    chown 1001:0 /app /home/1001 && \
+    chmod 755 /app /home/1001
+
+# Instalacja narzędzi potrzebnych w finalu (runtime)
+RUN microdnf update -y && \
+    microdnf install -y \
+    curl tar gzip xz unzip \
+    ca-certificates openssl \
+    libstdc++-devel libgcc_s \
+    && microdnf clean all && rm -rf /var/cache/yum/*
+
+# Kopiowanie Node.js z buildera
+COPY --from=builder /usr/local/ /usr/local/
+
+# Ustawienie PATH (teraz Node.js i biblioteki są obecne)
+ENV PATH="/usr/local/bin:${PATH}" 
+
+# === KLUCZOWA ZMIANA: KOPIOWANIE PLIKU ZIP GATLINGA DO STAŁEGO MIEJSCA W FINALU ===
+ENV GATLING_JS_FINAL_ZIP_PATH="/opt/tmp_downloads/gatling-js-bundle.zip" # Ścieżka w finalu
+
+RUN mkdir -p $(dirname ${GATLING_JS_FINAL_ZIP_PATH}) # Tworzy katalog /opt/tmp_downloads
+COPY --from=builder ${GATLING_JS_ZIP_PATH_BUILDER} ${GATLING_JS_FINAL_ZIP_PATH} # Kopiujemy z buildera
+# =================================================================================
+
+# Przeniesienie instalacji Gatlinga i wykonanie jej jako USER 1001
+USER 1001 
+ENV HOME="/home/1001" 
+
+RUN echo "Installing Gatling CLI using npx gatling install..." && \
+    npx gatling install "${GATLING_JS_FINAL_ZIP_PATH}" && \ # UŻYWAMY NOWEJ ŚCIEŻKI
+    rm "${GATLING_JS_FINAL_ZIP_PATH}" # Usunięcie pliku ZIP po instalacji
+
+# Upewnij się, że GATLING_JS_BUNDLE_FOLDER będzie używało GATLING_JS_VERSION
+ENV GATLING_JS_BUNDLE_FOLDER="gatling-js-bundle-${GATLING_JS_VERSION}"
+
+ENV GATLING_JS_HOME="/home/1001/.gatling/${GATLING_JS_BUNDLE_FOLDER}" \
+    PATH="${PATH}:/home/1001/.gatling/${GATLING_JS_BUNDLE_FOLDER}/bin" \
+    GRAALVM_HOME="/home/1001/.gatling/${GATLING_JS_BUNDLE_FOLDER}/graalvm" \
+    JVM_CLASSPATH="/home/1001/.gatling/${GATLING_JS_BUNDLE_FOLDER}/lib/java/*"
+
+WORKDIR /app
+
+COPY --from=builder /opt/app-root/src/node_modules ./node_modules
+COPY --from=builder /opt/app-root/src/package.json .
+COPY --from=builder /opt/app-root/src/sample.env .sample.env
+COPY --from=builder /opt/app-root/src/. .
+
+EXPOSE 3000
+
+CMD ["/bin/bash", "-c", "npm run test"]
