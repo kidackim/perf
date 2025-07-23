@@ -1,5 +1,6 @@
-FROM registry.access.redhat.com/ubi8-minimal AS builder
+# Dockerfile
 
+FROM registry.access.redhat.com/ubi8-minimal AS builder
 USER root
 RUN microdnf update -y && \
     microdnf install -y \
@@ -9,10 +10,8 @@ RUN microdnf update -y && \
     git sqlite \
     ca-certificates \
     openssl \
-    unzip \
     && microdnf clean all && rm -rf /var/cache/yum/*
-
-ARG NODE_VERSION=18.20.1 
+ARG NODE_VERSION=18.20.1
 
 ENV CFLAGS="-march=x86-64 -mtune=generic" \
     CXXFLAGS="-march=x86-64 -mtune=generic"
@@ -47,31 +46,31 @@ COPY package*.json ./
 RUN npm config set strict-ssl false && \
     npm install --unsafe-perm
 
+# Nowy krok diagnostyczny (możesz go zostawić tymczasowo, potem usunąć)
 RUN echo "--- DIAGNOSTYCZNY KROK PO npm install ---" && \
     ls -lha node_modules && \
     echo "Current working directory: $(pwd)" && \
     ls -lha /opt/app-root/src/node_modules || echo "node_modules not found at /opt/app-root/src/node_modules"
+# --- KONIEC DIAGNOSTYCZNEGO KROKU ---
 
-ARG GATLING_JS_VERSION=3.13.50 
+
+# === NOWY KLUCZOWY KROK: POBIERANIE I INSTALOWANIE GATLING-JS-BUNDLE (SKONSYLIDOWANY) ===
+ARG GATLING_JS_VERSION=3.14.306 
 ENV GATLING_JS_DOWNLOAD_URL="https://github.com/gatling/gatling-js/releases/download/v${GATLING_JS_VERSION}/gatling-js-bundle-${GATLING_JS_VERSION}-linux-x64.zip"
+ENV GATLING_JS_ZIP_PATH="/tmp/gatling-js-bundle.zip"
 
-RUN echo "Downloading Gatling.js Bundle..." && \
-    curl -sSLk "${GATLING_JS_DOWNLOAD_URL}" -o /tmp/gatling-js-bundle.zip
+# Pobieranie i instalacja w jednym kroku RUN
+RUN echo "Downloading Gatling.js Bundle from ${GATLING_JS_DOWNLOAD_URL}..." && \
+    curl -sSLk "${GATLING_JS_DOWNLOAD_URL}" -o "${GATLING_JS_ZIP_PATH}" && \
+    echo "Installing Gatling CLI using npx gatling install..." && \
+    npx gatling install "${GATLING_JS_ZIP_PATH}" --output-file-path /usr/local/bin/gatling && \
+    rm "${GATLING_JS_ZIP_PATH}" # Usuń tymczasowy plik ZIP po instalacji
 
-RUN echo "Verifying downloaded file..." && \
-    ls -lh /tmp/gatling-js-bundle.zip && \
-    file /tmp/gatling-js-bundle.zip && \
-    unzip -t /tmp/gatling-js-bundle.zip || (echo "Downloaded ZIP is corrupted or not a ZIP file. Failing build." && exit 1)
+# === KONIEC NOWEGO KLUCZOWEGO KROKU ===
 
-RUN echo "Extracting Gatling.js Bundle..." && \
-    unzip /tmp/gatling-js-bundle.zip -d /usr/local/lib/gatling-js-bundle && \
-    chmod -R 755 /usr/local/lib/gatling-js-bundle && \
-    rm /tmp/gatling-js-bundle.zip && \
-    echo "Installing Gatling CLI..." && \
-    npx gatling install --output-file-path /usr/local/bin/gatling
+COPY . . 
 
-COPY . .
-
+# Stage 2: Final
 FROM registry.access.redhat.com/ubi8-minimal AS final 
 
 USER root
@@ -84,7 +83,7 @@ WORKDIR /app
 
 COPY --from=builder /opt/app-root/src/node_modules ./node_modules
 COPY --from=builder /opt/app-root/src/package.json .
-COPY --from=builder /opt/app-root/src/sample.env .
+COPY --from=builder /opt/app-root/src/sample.env .sample.env
 COPY --from=builder /opt/app-root/src/. .
 
 EXPOSE 3000
