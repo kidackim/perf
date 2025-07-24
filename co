@@ -1,11 +1,3 @@
-# Argumenty budowania dla nazwy użytkownika i hasła proxy (NIEZBĘDNE PRZY BUDOWANIU)
-ARG HTTP_PROXY_USERNAME="" # <-- MUSISZ PODAĆ TĄ NAZWĘ UŻYTKOWNIKA PRZY BUILdzie
-ARG HTTP_PROXY_PASSWORD="" # <-- MUSISZ PODAĆ TO HASŁO PRZY BUILdzie
-ARG HTTP_PROXY_SERVER="fpsg-proxy.pl.ing-ad:8080" # <-- POTWIERDZONE Z .npmrc
-
-# Zmienne środowiskowe, które będą dostępne podczas budowania obrazu
-# Node.js, curl, wget, npm i wiele innych narzędzi używa tych zmiennych.
-# Wbudowujemy dane uwierzytelniające bezpośrednio w URL proxy
-ENV HTTP_PROXY="http://${HTTP_PROXY_USERNAME}:${HTTP_PROXY_PASSWORD}@${HTTP_PROXY_SERVER}"
-ENV HTTPS_PROXY="http://${HTTP_PROXY_USERNAME}:${HTTP_PROXY_PASSWORD}@${HTTP_PROXY_SERVER}"
-ENV NO_PROXY=".pl.ing-ad,localhost,127.0.0.1" # <-- POTWIERDZONE Z .npmrc, uzupełnione o standardowe
+ENV HTTP_PROXY="http://fpsg-proxy.pl.ing-ad:8080"
+ENV HTTPS_PROXY="http://fpsg-proxy.pl.ing-ad:8080"
+ENV NO_PROXY=".pl.ing-ad,localhost,127.0.0.1" # Użycie standardowych wartości plus domeny z obrazka
