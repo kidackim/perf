@@ -1,3 +1,12 @@
-ENV HTTP_PROXY="http://fpsg-proxy.pl.ing-ad:8080"
-ENV HTTPS_PROXY="http://fpsg-proxy.pl.ing-ad:8080"
-ENV NO_PROXY=".pl.ing-ad,localhost,127.0.0.1" # Użycie standardowych wartości plus domeny z obrazka
+   const normalizedStatsFilePath = statsFilePath.replace(/\\/g, '/');
+    const normalizedOutputXmlPath = outputXmlPath.replace(/\\/g, '/');
+    // =================================================================
+
+    // --- Diagnostyka (możesz to usunąć po upewnieniu się, że działa) ---
+    console.log('--- Wewnątrz convertGatlingStatsToJUnitXML ---');
+    console.log('Oryginalna statsFilePath:', statsFilePath);
+    console.log('Znormalizowana statsFilePath:', normalizedStatsFilePath);
+    console.log('Oryginalna outputXmlPath:', outputXmlPath);
+    console.log('Znormalizowana outputXmlPath:', normalizedOutputXmlPath);
+    console.log('--------------------------------------------------');
+    // ---
