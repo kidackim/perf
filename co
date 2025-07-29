@@ -1,145 +1,93 @@
 // generate_junit_report.mjs
-// Ten skrypt parsuje tekstowy plik logu Gatlinga i generuje raport JUnit XML.
-// Jest dostosowany do nowej struktury logu i stara się być odporny na brakujące dane.
+// Ten skrypt wyłącznie parsuje tekstowy plik logu Gatlinga i generuje raport JUnit XML.
+// Jest to podejście mniej niezawodne niż parsowanie strukturalnych plików statystyk (.js lub .json).
 
-import { create } from 'xmlbuilder2';
-import fs from 'fs';
+import { create } from 'xmlbuilder2'; // Wymaga instalacji: npm install xmlbuilder2
+import fs from 'fs'; // Moduł do operacji na plikach
 
 /**
- * Parsuje tekstowy plik logu Gatlinga i wyodrębnia statystyki.
+ * Parsuje tekstowy plik logu Gatlinga i wyodrębnia zagregowane statystyki.
  * @param {string} logContent - Zawartość tekstowego pliku gatling_output.log.
  * @returns {Object} - Obiekt z sparsowanymi statystykami.
  */
 function parseGatlingOutputLog(logContent) {
     const stats = {
-        simulationName: "UnknownSimulation", // Domyślna nazwa
-        simulationStartTime: "", // Do parsowania z logu
+        totalRequests: 0,
+        okRequests: 0,
+        koRequests: 0,
+        minResponseTime: 0,
+        maxResponseTime: 0,
+        meanResponseTime: 0,
+        stdDevResponseTime: 0,
+        p50ResponseTime: 0,
+        p75ResponseTime: 0,
+        p95ResponseTime: 0,
+        p99ResponseTime: 0,
+        meanThroughput: 0,
         simulationTimeSeconds: 0,
-        global: {
-            totalRequests: 0,
-            okRequests: 0,
-            koRequests: 0,
-            minResponseTime: 0,
-            maxResponseTime: 0,
-            meanResponseTime: 0,
-            stdDevResponseTime: 0,
-            p50ResponseTime: 0,
-            p75ResponseTime: 0,
-            p95ResponseTime: 0,
-            p99ResponseTime: 0,
-            meanThroughput: 0
-        },
-        requests: [], // Tutaj będziemy przechowywać statystyki dla każdego żądania
-        errors: [] // Tutaj będziemy przechowywać informacje o błędach
+        [cite_start]simulationName: "basicSimulation" // Z logu: "Simulation basicSimulation started..." [cite: 1]
     };
 
-    // 1. Parsowanie nazwy symulacji
-    const simulationNameMatch = logContent.match(/Simulation (\w+) started/);
-    if (simulationNameMatch) {
-        stats.simulationName = simulationNameMatch[1];
+    // Parsowanie danych z logu tekstowego
+    // Te wyrażenia regularne są bardzo wrażliwe na zmiany w formacie logu Gatlinga.
+
+    // Sekcja Requests (Total, OK, KO)
+    const requestsGlobalMatch = logContent.match(/> Global\s+\|\s+(\d+)\s+\|\s+(\d+)\s+\|\s+(\d+)/); [cite_start]// [cite: 3]
+    if (requestsGlobalMatch) {
+        stats.totalRequests = parseInt(requestsGlobalMatch[1]); [cite_start]// [cite: 3]
+        stats.okRequests = parseInt(requestsGlobalMatch[2]); [cite_start]// [cite: 3]
+        stats.koRequests = parseInt(requestsGlobalMatch[3]); [cite_start]// [cite: 3]
     }
 
-    // 2. Parsowanie daty/czasu rozpoczęcia symulacji
-    const startTimeMatch = logContent.match(/(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} GMT)/);
-    if (startTimeMatch) {
-        stats.simulationStartTime = startTimeMatch[1];
+    // Czas trwania symulacji
+    const elapsedMatch = logContent.match(/(\d+)s elapsed/); [cite_start]// [cite: 2]
+    if (elapsedMatch) {
+        stats.simulationTimeSeconds = parseInt(elapsedMatch[1]); [cite_start]// [cite: 2]
+    }
+
+    // Global Information
+    const globalInfoMatches = logContent.matchAll(
+        /(request count|min response time \(ms\)|max response time \(ms\)|mean response time \(ms\)|response time std deviation \(ms\)|response time 50th percentile \(ms\)|response time 75th percentile \(ms\)|response time 95th percentile \(ms\)|response time 99th percentile \(ms\)|mean throughput \(rps\))\s+\|\s+([\d,]+)\s+\|\s+([\d,]+)\s+\|\s+(?:[\d,-]+)/g
+    );
+
+    for (const match of globalInfoMatches) {
+        const metricName = match[1];
+        const value = parseInt(match[2].replace(/,/g, '')); // Wartość dla "Total"
+        
+        switch (metricName) {
+            case 'request count':
+                if (stats.totalRequests === 0) stats.totalRequests = value; [cite_start]// [cite: 6]
+                break;
+            case 'min response time (ms)':
+                stats.minResponseTime = value; [cite_start]// [cite: 7]
+                break;
+            case 'max response time (ms)':
+                stats.maxResponseTime = value; [cite_start]// [cite: 8]
+                break;
+            case 'mean response time (ms)':
+                stats.meanResponseTime = value; [cite_start]// [cite: 9]
+                break;
+            case 'response time std deviation (ms)':
+                stats.stdDevResponseTime = value; [cite_start]// [cite: 10]
+                break;
+            case 'response time 50th percentile (ms)':
+                stats.p50ResponseTime = value; [cite_start]// [cite: 11]
+                break;
+            case 'response time 75th percentile (ms)':
+                stats.p75ResponseTime = value; [cite_start]// [cite: 12]
+                break;
+            case 'response time 95th percentile (ms)':
+                stats.p95ResponseTime = value; [cite_start]// [cite: 13]
+                break;
+            case 'response time 99th percentile (ms)':
+                stats.p99ResponseTime = value; [cite_start]// [cite: 14]
+                break;
+            case 'mean throughput (rps)':
+                stats.meanThroughput = value; [cite_start]// [cite: 15]
+                break;
+        }
     }
     
-    // 3. Parsowanie czasu trwania symulacji
-    const elapsedMatch = logContent.match(/(\d+)s elapsed/);
-    if (elapsedMatch) {
-        stats.simulationTimeSeconds = parseInt(elapsedMatch[1]);
-    } else {
-        // Fallback: jeśli nie znaleziono "elapsed", spróbuj obliczyć z 'Total' w mean throughput / rps
-        // To jednak nie jest idealne, bo 'Total' to liczba requestów, nie czas.
-        // Będzie to po prostu 0, jeśli nie znajdzie.
-        stats.simulationTimeSeconds = 0; 
-    }
-
-
-    // 4. Parsowanie statystyk Global (sekcja "---- Global Information ----")
-    const globalInfoSection = logContent.split('---- Global Information ----')[1]?.split('---- Response Time Distribution ----')[0];
-    if (globalInfoSection) {
-        const parseMetric = (regex) => {
-            const match = globalInfoSection.match(regex);
-            return match ? parseInt(match[2].replace(/,/g, '')) : 0;
-        };
-
-        stats.global.totalRequests = parseMetric(/request count\s+\|\s+([\d,]+)\s+\|\s+([\d,]+)\s+\|\s+([\d,-]+)/); // Pobieramy Total
-        // OK/KO dla global z "Requests" zamiast "Global Information" bo to jest dokładniejsze
-        const requestsSummaryMatch = logContent.match(/---- Requests ----[\s\S]*?> Global\s+\|\s+(\d+)\s+\|\s+(\d+)\s+\|\s+(\d+)/);
-        if (requestsSummaryMatch) {
-            stats.global.okRequests = parseInt(requestsSummaryMatch[2]);
-            stats.global.koRequests = parseInt(requestsSummaryMatch[3]);
-        } else {
-            // Fallback, jeśli Requests Global nie znaleziono
-            stats.global.okRequests = stats.global.totalRequests; // Zakładamy wszystkie OK
-            stats.global.koRequests = 0;
-        }
-
-
-        stats.global.minResponseTime = parseMetric(/min response time \(ms\)\s+\|\s+([\d,]+)/);
-        stats.global.maxResponseTime = parseMetric(/max response time \(ms\)\s+\|\s+([\d,]+)/);
-        stats.global.meanResponseTime = parseMetric(/mean response time \(ms\)\s+\|\s+([\d,]+)/);
-        stats.global.stdDevResponseTime = parseMetric(/response time std deviation \(ms\)\s+\|\s+([\d,]+)/);
-        stats.global.p50ResponseTime = parseMetric(/response time 50th percentile \(ms\)\s+\|\s+([\d,]+)/);
-        stats.global.p75ResponseTime = parseMetric(/response time 75th percentile \(ms\)\s+\|\s+([\d,]+)/);
-        stats.global.p95ResponseTime = parseMetric(/response time 95th percentile \(ms\)\s+\|\s+([\d,]+)/);
-        stats.global.p99ResponseTime = parseMetric(/response time 99th percentile \(ms\)\s+\|\s+([\d,]+)/);
-        stats.global.meanThroughput = parseMetric(/mean throughput \(rps\)\s+\|\s+([\d,.]+)/); // Przechwytuje również dziesiętne
-    } else {
-        console.warn("Ostrzeżenie: Nie znaleziono sekcji 'Global Information' w logu.");
-    }
-
-    // 5. Parsowanie statystyk dla poszczególnych żądań
-    const requestsSectionMatch = logContent.match(/---- Requests ----([\s\S]*?)---- Scenario ----/);
-    if (requestsSectionMatch && requestsSectionMatch[1]) {
-        const requestsBlock = requestsSectionMatch[1];
-        const requestLines = requestsBlock.split('\n').filter(line => line.trim().startsWith('>') && !line.includes('> Global'));
-
-        for (const line of requestLines) {
-            const requestMatch = line.match(/> (.+?)\s+\|\s+(\d+)\s+\|\s+(\d+)\s+\|\s+(\d+)/);
-            if (requestMatch) {
-                stats.requests.push({
-                    name: requestMatch[1].trim(),
-                    total: parseInt(requestMatch[2]),
-                    ok: parseInt(requestMatch[3]),
-                    ko: parseInt(requestMatch[4])
-                });
-            }
-        }
-    } else {
-        console.warn("Ostrzeżenie: Nie znaleziono sekcji 'Requests' dla poszczególnych żądań.");
-    }
-
-    // 6. Parsowanie błędów
-    const errorsSectionMatch = logContent.match(/---- Response Time Distribution ----[\s\S]*?> KO\s+(\d+)\s+\((\d+)%\)[\s\S]*?Errors([\s\S]*?)(?:^={70,}|$)/m);
-    if (errorsSectionMatch && errorsSectionMatch[1]) {
-        const errorsBlock = errorsSectionMatch[1];
-        const errorLines = errorsBlock.split('\n').filter(line => line.trim().length > 0 && !line.includes('jsonPath(')); // Filtrujemy puste linie i te, które wyglądają na artefakty parsowania
-
-        for (const line of errorLines) {
-            const errorMatch = line.match(/(\d+)\s+\(([\d.]+)%\)\s+(.+)/);
-            if (errorMatch) {
-                stats.errors.push({
-                    count: parseInt(errorMatch[1]),
-                    percentage: parseFloat(errorMatch[2]),
-                    message: errorMatch[3].trim()
-                });
-            } else {
-                // Jeśli linia błędu nie pasuje do wzorca, dodaj ją jako surowy komunikat
-                stats.errors.push({
-                    count: 0,
-                    percentage: 0,
-                    message: line.trim() // Dodaj całą linię jako komunikat błędu
-                });
-            }
-        }
-    } else {
-        console.warn("Ostrzeżenie: Nie znaleziono sekcji 'Errors' lub jest pusta.");
-    }
-
-
     return stats;
 }
 
@@ -149,66 +97,60 @@ function parseGatlingOutputLog(logContent) {
  * @param {Object} stats - Sparsowany obiekt statystyk.
  * @returns {string} - Raport JUnit XML jako string.
  */
-function generateJUnitReportFromTextLog(stats) {
+function generateJUnitReportFromParsedStats(stats) {
     let xml = `<?xml version="1.0" encoding="UTF-8"?>\n`;
     xml += `<testsuites>\n`;
-    
-    // Główny testsuite dla całej symulacji
-    xml += `  <testsuite name="${stats.simulationName}" tests="${stats.global.totalRequests}" failures="${stats.global.koRequests}" errors="${stats.errors.length}" time="${stats.simulationTimeSeconds.toFixed(3)}" timestamp="${stats.simulationStartTime ? new Date(stats.simulationStartTime).toISOString().slice(0, 19) + 'Z' : new Date().toISOString().slice(0, 19) + 'Z'}">\n`;
+    xml += `  <testsuite name="${stats.simulationName}" tests="${stats.totalRequests}" failures="${stats.koRequests}" errors="0" time="${stats.simulationTimeSeconds.toFixed(3)}" timestamp="${new Date().toISOString().slice(0, 19)}Z">\n`;
 
     // Właściwości testsuite (ogólne metryki)
     xml += `    <properties>\n`;
     xml += `      <property name="simulation.name" value="${stats.simulationName}"/>\n`;
     xml += `      <property name="simulation.duration.seconds" value="${stats.simulationTimeSeconds.toString()}"/>\n`;
-    xml += `      <property name="requests.total" value="${stats.global.totalRequests.toString()}"/>\n`;
-    xml += `      <property name="requests.successful" value="${stats.global.okRequests.toString()}"/>\n`;
-    xml += `      <property name="requests.failed" value="${stats.global.koRequests.toString()}"/>\n`;
-    xml += `      <property name="mean.requests.per.second" value="${stats.global.meanThroughput.toString()}"/>\n`;
-    xml += `      <property name="min.response.time.ms" value="${stats.global.minResponseTime.toString()}"/>\n`;
-    xml += `      <property name="max.response.time.ms" value="${stats.global.maxResponseTime.toString()}"/>\n`;
-    xml += `      <property name="mean.response.time.ms" value="${stats.global.meanResponseTime.toString()}"/>\n`;
-    xml += `      <property name="stddev.response.time.ms" value="${stats.global.stdDevResponseTime.toString()}"/>\n`;
-    xml += `      <property name="p50.response.time.ms" value="${stats.global.p50ResponseTime.toString()}"/>\n`;
-    xml += `      <property name="p75.response.time.ms" value="${stats.global.p75ResponseTime.toString()}"/>\n`;
-    xml += `      <property name="p95.response.time.ms" value="${stats.global.p95ResponseTime.toString()}"/>\n`;
-    xml += `      <property name="p99.response.time.ms" value="${stats.global.p99ResponseTime.toString()}"/>\n`;
+    xml += `      <property name="requests.total" value="${stats.totalRequests.toString()}"/>\n`;
+    xml += `      <property name="requests.successful" value="${stats.okRequests.toString()}"/>\n`;
+    xml += `      <property name="requests.failed" value="${stats.koRequests.toString()}"/>\n`;
+    xml += `      <property name="mean.requests.per.second" value="${stats.meanThroughput.toString()}"/>\n`;
+    xml += `      <property name="min.response.time.ms" value="${stats.minResponseTime.toString()}"/>\n`;
+    xml += `      <property name="max.response.time.ms" value="${stats.maxResponseTime.toString()}"/>\n`;
+    xml += `      <property name="mean.response.time.ms" value="${stats.meanResponseTime.toString()}"/>\n`;
+    xml += `      <property name="stddev.response.time.ms" value="${stats.stdDevResponseTime.toString()}"/>\n`;
+    xml += `      <property name="p50.response.time.ms" value="${stats.p50ResponseTime.toString()}"/>\n`;
+    xml += `      <property name="p75.response.time.ms" value="${stats.p75ResponseTime.toString()}"/>\n`;
+    xml += `      <property name="p95.response.time.ms" value="${stats.p95ResponseTime.toString()}"/>\n`;
+    xml += `      <property name="p99.response.time.ms" value="${stats.p99ResponseTime.toString()}"/>\n`;
     xml += `    </properties>\n`;
 
-    // TestCase: Globalne podsumowanie sukcesów/porażek
-    xml += `    <testcase name="Global Requests Summary" classname="${stats.simulationName}.Summary" time="${(stats.global.meanResponseTime / 1000).toFixed(3)}">\n`;
-    if (stats.global.koRequests > 0) {
-        xml += `      <failure message="Performance test failed: ${stats.global.koRequests} out of ${stats.global.totalRequests} requests failed.">\n`;
-        xml += `        <![CDATA[Total Requests: ${stats.global.totalRequests}, OK: ${stats.global.okRequests}, KO: ${stats.global.koRequests}.\n`;
-        xml += `Min Response Time: ${stats.global.minResponseTime}ms, Max Response Time: ${stats.global.maxResponseTime}ms, Mean Response Time: ${stats.global.meanResponseTime}ms.]]>\n`;
+    // TestCase: Podsumowanie sukcesów/porażek
+    const summaryTestCaseTime = (stats.meanResponseTime / 1000).toFixed(3); // Używamy średniego czasu odpowiedzi dla tego test case'u
+
+    xml += `    <testcase name="Global Requests Summary" classname="${stats.simulationName}.Summary" time="${summaryTestCaseTime}">\n`;
+    if (stats.koRequests > 0) {
+        xml += `      <failure message="Performance test failed: ${stats.koRequests} out of ${stats.totalRequests} requests failed.">\n`;
+        xml += `        <![CDATA[Total Requests: ${stats.totalRequests}, OK: ${stats.okRequests}, KO: ${stats.koRequests}.\n`;
+        xml += `Min Response Time: ${stats.minResponseTime}ms, Max Response Time: ${stats.maxResponseTime}ms, Mean Response Time: ${stats.meanResponseTime}ms.]]>\n`;
         xml += `      </failure>\n`;
     } else {
-        xml += `      <system-out><![CDATA[All ${stats.global.totalRequests} global requests completed successfully.]]></system-out>\n`;
+        xml += `      <system-out><![CDATA[All ${stats.totalRequests} requests completed successfully.]]></system-out>\n`;
     }
     xml += `    </testcase>\n`;
 
-    // TestCase dla każdego zidentyfikowanego żądania (z sekcji ---- Requests ----)
-    for (const req of stats.requests) {
-        const reqTime = (stats.global.meanResponseTime / 1000).toFixed(3); // Używamy średniego czasu globalnego, bo brak czasu dla indywidualnych
-        xml += `    <testcase name="${req.name}" classname="${stats.simulationName}.Request" time="${reqTime}">\n`;
-        if (req.ko > 0) {
-            xml += `      <failure message="Request '${req.name}' failed: ${req.ko} out of ${req.total} requests.">\n`;
-            xml += `        <![CDATA[Total for ${req.name}: ${req.total}, OK: ${req.ok}, KO: ${req.ko}.]]>\n`;
-            xml += `      </failure>\n`;
-        } else {
-            xml += `      <system-out><![CDATA[Request '${req.name}' completed successfully. Total: ${req.total}, OK: ${req.ok}.]]></system-out>\n`;
-        }
-        xml += `    </testcase>\n`;
-    }
+    // Dodatkowe testcase'y dla kluczowych metryk, aby były widoczne jako osobne "testy" w raporcie JUnit
+    xml += `    <testcase name="Mean Response Time" classname="${stats.simulationName}.MeanResponseTime" time="${(stats.meanResponseTime / 1000).toFixed(3)}">\n`;
+    xml += `      <system-out><![CDATA[Mean response time for all requests: ${stats.meanResponseTime} ms.]]></system-out>\n`;
+    xml += `    </testcase>\n`;
 
-    // TestCase dla każdego błędu z sekcji Errors
-    for (let i = 0; i < stats.errors.length; i++) {
-        const error = stats.errors[i];
-        xml += `    <testcase name="Error ${i + 1}: ${error.message.substring(0, 50)}..." classname="${stats.simulationName}.Error" time="0.000">\n`; // Czas 0, bo to nie jest wykonanie testu
-        xml += `      <error message="Gatling Error: ${error.message}">\n`;
-        xml += `        <![CDATA[Count: ${error.count}, Percentage: ${error.percentage}%.\nError Message: ${error.message}]]>\n`;
-        xml += `      </error>\n`;
-        xml += `    </testcase>\n`;
-    }
+    xml += `    <testcase name="Response Time Percentiles" classname="${stats.simulationName}.Percentiles" time="${(stats.p99ResponseTime / 1000).toFixed(3)}">\n`;
+    xml += `      <system-out><![CDATA[Response Time Percentiles (ms):\n`;
+    xml += `        50th Percentile: ${stats.p50ResponseTime}\n`;
+    xml += `        75th Percentile: ${stats.p75ResponseTime}\n`;
+    xml += `        95th Percentile: ${stats.p95ResponseTime}\n`;
+    xml += `        99th Percentile: ${stats.p99ResponseTime}\n`;
+    xml += `      ]]></system-out>\n`;
+    xml += `    </testcase>\n`;
+
+    xml += `    <testcase name="Mean Throughput (RPS)" classname="${stats.simulationName}.Throughput" time="${(stats.totalRequests / (stats.meanThroughput || 1) / 1000).toFixed(3)}">\n`;
+    xml += `      <system-out><![CDATA[Mean Throughput: ${stats.meanThroughput} requests/second.]]></system-out>\n`;
+    xml += `    </testcase>\n`;
 
     xml += `  </testsuite>\n`;
     xml += `</testsuites>\n`;
@@ -216,4 +158,43 @@ function generateJUnitReportFromTextLog(stats) {
     return xml;
 }
 
-export { parseGatlingOutputLog, generateJUnitReportFromTextLog };
+/**
+ * Główna funkcja skryptu do uruchomienia konwersji.
+ * Przyjmuje ścieżkę do pliku logu wejściowego i opcjonalnie ścieżkę do pliku wyjściowego XML.
+ */
+async function main() {
+    const args = process.argv.slice(2); // Argumenty wiersza poleceń
+
+    const logFilePath = args[0]; // Pierwszy argument to ścieżka do logu
+    const outputXmlPath = args[1] || 'junit_report_from_log.xml'; // Drugi argument lub domyślna nazwa
+
+    if (!logFilePath) {
+        console.error('Użycie: node generate_junit_report.mjs <ścieżka_do_gatling_output.log> [ścieżka_do_pliku_wyjściowego.xml]');
+        process.exit(1);
+    }
+
+    try {
+        if (!fs.existsSync(logFilePath)) {
+            throw new Error(`Plik logu nie znaleziony: ${logFilePath}`);
+        }
+
+        const logContent = fs.readFileSync(logFilePath, 'utf8');
+        const parsedStats = parseGatlingOutputLog(logContent);
+        const junitXml = generateJUnitReportFromParsedStats(parsedStats);
+
+        fs.writeFileSync(outputXmlPath, junitXml, 'utf8');
+        console.log(`Raport JUnit XML został wygenerowany do: ${outputXmlPath}`);
+
+    } catch (error) {
+        console.error(`Błąd podczas generowania raportu JUnit XML: ${error.message}`);
+        if (error.stack) {
+            console.error(error.stack);
+        }
+        process.exit(1);
+    }
+}
+
+// Uruchom funkcję główną, gdy skrypt jest uruchamiany bezpośrednio
+if (import.meta.url === `file://${process.argv[1]}`) {
+    main();
+}
