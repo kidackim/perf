@@ -1,93 +1,230 @@
-// raport.mjs (główny skrypt sterujący, ten z Twojego obrazka)
+// toXml.mjs
+// Ten skrypt jest odpowiedzialny za parsowanie pliku global_stats.js generowanego przez Gatlinga
+// i konwertowanie go do formatu raportu JUnit XML.
 
-import { execSync } from 'child_process';
-import { existsSync, readFileSync, statSync } from 'fs';
+import { create } from 'xmlbuilder2';
+import fs from 'fs';
 import path from 'path';
-import { fileURLToPath } from 'url';
-import { dirname, resolve as pathResolve } from 'path';
 
-// Importujemy naszą funkcję do konwersji
-import { convertGatlingStatsToJUnitXml } from './toXml.mjs'; // Upewnij się, że nazwa pliku jest prawidłowa
+/**
+ * Parsuje obiekt statystyk z pliku global_stats.js generowanego przez Gatlinga.
+ * @param {string} statsFilePath - Pełna ścieżka do pliku global_stats.js
+ * @returns {Object} - Obiekt ze statystykami
+ */
+function parseGatlingStatsFile(statsFilePath) {
+    console.log(`[toXml.mjs] Próba wczytania pliku statystyk: ${statsFilePath}`);
+    const fileContent = fs.readFileSync(statsFilePath, 'utf8');
+    // Logujemy tylko początek pliku, aby nie zaśmiecać konsoli dużymi danymi
+    console.log(`[toXml.mjs] Wczytana zawartość pliku (pierwsze 500 znaków): ${fileContent.substring(0, 500)}...`);
+    
+    // Używamy wyrażenia regularnego do wyodrębnienia obiektu 'stats'
+    // Format to zazwyczaj 'var stats = { ... }; function fillStats(...)'
+    // Flaga 's' dla regexu pozwala na dopasowanie wielolinijkowych stringów (dotAll)
+    const statsMatch = fileContent.match(/var stats = ({.*?});\s*function fillStats/s);
+    
+    console.log(`[toXml.mjs] Wynik dopasowania regex: ${statsMatch ? 'Znaleziono' : 'NIE znaleziono'}`);
 
-const GATLING_DIR = 'target/gatling';
+    if (statsMatch && statsMatch[1]) {
+        try {
+            // Evaluacja stringu jako kodu JavaScript w celu uzyskania obiektu.
+            // Jest to POTENCJALNIE NIEBEZPIECZNE, jeśli plik stats.js mógłby pochodzić z niezaufanego źródła.
+            // Dla danych generowanych przez Gatlinga powinno być bezpieczne.
+            const statsObject = eval('(' + statsMatch[1] + ')'); 
+            console.log(`[toXml.mjs] Obiekt 'stats' po parsowaniu (fragment contents.Global):`, statsObject.contents?.Global);
+            
+            // W oryginalnych statystykach Gatlinga, całkowity czas symulacji (totalTime)
+            // jest często dostępny w obiekcie Global w milisekundach.
+            // Jeśli nie ma, wracamy do domyślnej 1s.
+            statsObject.simulationDuration = (statsObject.contents?.Global?.totalTime / 1000) || 1; 
+            console.log(`[toXml.mjs] Wyliczona długość symulacji: ${statsObject.simulationDuration} sekund`);
 
-async function main() {
-    const _filename = fileURLToPath(import.meta.url);
-    const _dirname = dirname(_filename);
-
-    console.log(`Katalog roboczy skryptu: ${process.cwd()}`);
-    console.log(`Katalog skryptu: ${_dirname}`);
-
-    const resolvedTargetDirectory = pathResolve(GATLING_DIR);
-    console.log(`Docelowy katalog raportów: ${resolvedTargetDirectory}`);
-
-    try {
-        if (!existsSync(GATLING_DIR)) {
-            // W przypadku, gdy katalog Gatlinga nie istnieje
-            console.error(`Katalog Gatlinga "${GATLING_DIR}" nie istnieje mimo próby utworzenia.`);
-            throw new Error(`Katalog "${GATLING_DIR}" nie istnieje.`);
+            return statsObject;
+        } catch (e) {
+            console.error(`[toXml.mjs] Błąd parsowania obiektu stats z ${statsFilePath}:`, e);
+            throw new Error(`Nie udało się sparsować obiektu statystyk z pliku ${statsFilePath}. Sprawdź, czy plik jest poprawny i czy format "var stats = {...}; function fillStats" jest zachowany.`);
         }
-
-        function findLatestDir(baseDir) {
-            const dirs = fs.readdirSync(baseDir, { withFileTypes: true })
-                .filter(dirent => dirent.isDirectory() && dirent.name.startsWith('jssimulation-'))
-                .map(dirent => ({
-                    name: dirent.name,
-                    path: path.join(baseDir, dirent.name),
-                    mtime: statSync(path.join(baseDir, dirent.name)).mtime.getTime()
-                }))
-                .sort((a, b) => b.mtime - a.mtime); // Sortuj malejąco według daty modyfikacji
-
-            return dirs.length > 0 ? dirs[0].path : null;
-        }
-
-        const LATEST_DIR = findLatestDir(GATLING_DIR);
-        if (!LATEST_DIR) {
-            throw new Error(`Nie znaleziono katalogów 'jssimulation-' w ${GATLING_DIR}.`);
-        }
-        console.log(`Znaleziono najnowszy katalog symulacji: ${LATEST_DIR}`);
-
-        const STATS_FILE = path.join(LATEST_DIR, 'js', 'global_stats.js'); // Zmieniono z 'stats.js' na 'global_stats.js'
-        if (!existsSync(STATS_FILE)) {
-            throw new Error(`Nie znaleziono pliku statystyk: ${STATS_FILE}. Upewnij się, że Gatling wygenerował ten plik.`);
-        }
-        console.log(`Znaleziono plik stats.js: ${STATS_FILE}`);
-
-        const XML_BASE_NAME = 'TEST-gatling-results.xml';
-        const resolvedXmlFile = path.join(resolvedTargetDirectory, XML_BASE_NAME);
-
-        console.log(`Generowanie raportu XML do: ${resolvedXmlFile}`);
-        // Wywołujemy naszą funkcję do konwersji bezpośrednio
-        await convertGatlingStatsToJUnitXml(STATS_FILE, resolvedXmlFile);
-
-        if (!existsSync(resolvedXmlFile)) {
-            throw new Error(`Nie udało się wygenerować pliku XML: ${resolvedXmlFile}`);
-        }
-        console.log(`Raport XML został wygenerowany do: ${resolvedXmlFile}`);
-
-        // Część dotycząca HTML
-        const HTML_BASE_NAME = 'index.html';
-        const resolvedHtmlFile = path.join(resolvedTargetDirectory, HTML_BASE_NAME);
-
-        console.log(`Generowanie raportu HTML do: ${resolvedHtmlFile}`);
-        // Tutaj zakładałem, że masz skrypt 'toHtml.mjs', który jest w stanie to zrobić
-        // Jeśli nie, ten fragment kodu nie zadziała.
-        // execSync(`node toHtml.mjs "${resolvedXmlFile}" "${resolvedHtmlFile}"`, { stdio: 'inherit' });
-
-        if (!existsSync(resolvedHtmlFile)) {
-            console.warn(`Ostrzeżenie: Plik HTML "${resolvedHtmlFile}" nie został znaleziony. Może to być normalne, jeśli toHtml.mjs nie generuje pliku w tym miejscu.`);
-            // throw new Error(`Nie udało się wygenerować pliku HTML: ${resolvedHtmlFile}`);
-        }
-        console.log(`Raport HTML został wygenerowany: ${resolvedHtmlFile}`);
-        console.log(`Proces zakończony pomyślnie. Wyniki w katalogu: ${resolvedTargetDirectory}`);
-
-    } catch (error) {
-        console.error(`Wystąpił błąd podczas wykonywania skryptu głównego: ${error.message}`);
-        if (error.stack) {
-            console.error(error.stack);
-        }
-        process.exit(1);
+    } else {
+        throw new Error(`[toXml.mjs] Nie znaleziono obiektu 'stats' w pliku ${statsFilePath}. Sprawdź format pliku global_stats.js.`);
     }
 }
 
-main();
+
+/**
+ * Zlicza liczbę testów (żądań) ze statystyk.
+ * @param {Object} stats - Obiekt ze statystykami
+ * @returns {number} - Liczba testów
+ */
+function countTests(stats) {
+    if (stats.contents && stats.contents.Global) {
+        return stats.contents.Global.numberOfRequests.total;
+    }
+    return 0;
+}
+
+/**
+ * Zlicza liczbę niepowodzeń w statystykach.
+ * @param {Object} stats - Obiekt ze statystykami
+ * @returns {number} - Liczba niepowodzeń
+ */
+function countFailures(stats) {
+    if (stats.contents && stats.contents.Global) {
+        return stats.contents.Global.numberOfRequests.ko;
+    }
+    return 0;
+}
+
+/**
+ * Oblicza całkowity czas testu na podstawie obiektu statystyk.
+ * @param {Object} stats - Obiekt ze statystykami
+ * @returns {number} - Całkowity czas w sekundach
+ */
+function calculateTotalTime(stats) {
+    return stats.simulationDuration || 0; 
+}
+
+
+/**
+ * Dodaje pojedynczy element testcase do XML.
+ * @param {Object} request - Obiekt zawierający statystyki dla danego żądania (np. "Global").
+ * @param {string} simulationName - Nazwa symulacji.
+ * @param {string} type - Typ testu (np. "Global Request").
+ * @returns {string} - Fragment XML z testcase.
+ */
+function addTestCase(request, simulationName, type) {
+    let xml = '';
+    const stats = request; 
+
+    // Upewniamy się, że wszystkie potrzebne pola istnieją, zanim ich użyjemy
+    const requestName = stats.name || "Unknown";
+    const totalRequests = stats.numberOfRequests?.total || 0;
+    const okRequests = stats.numberOfRequests?.ok || 0;
+    const koRequests = stats.numberOfRequests?.ko || 0;
+    const isSuccess = koRequests === 0;
+    const meanResponseTime = stats.meanResponseTime || 0;
+    const testTime = (meanResponseTime / 1000).toFixed(3); 
+    const className = `${simulationName}.${type}`.replace(/\s|\//g, '_'); 
+
+    xml += `    <testcase name="${requestName}" classname="${className}" time="${testTime}">\n`;
+
+    if (!isSuccess) {
+        xml += `      <failure message="Request failed: ${koRequests} out of ${totalRequests} requests failed.">\n`;
+        xml += `        <![CDATA[Failure details for ${requestName}:\n`;
+        xml += `Total Requests: ${totalRequests}\n`;
+        xml += `OK: ${okRequests}\n`;
+        xml += `KO: ${koRequests}\n`;
+        xml += `Requests Per Second: ${stats.meanNumberOfRequestsPerSecond || 0}\n`;
+        xml += `Response Time (ms):\n`;
+        xml += `  Min: ${stats.minResponseTime || 0}\n`;
+        xml += `  50th percentile: ${stats.percentiles1 || 0}\n`;
+        xml += `  75th percentile: ${stats.percentiles2 || 0}\n`;
+        xml += `  95th percentile: ${stats.percentiles3 || 0}\n`;
+        xml += `  99th percentile: ${stats.percentiles4 || 0}\n`;
+        xml += `  Max: ${stats.maxResponseTime || 0}\n`;
+        xml += `  Mean: ${meanResponseTime}\n`;
+        xml += `  Std Dev: ${stats.standardDeviation || 0}\n`;
+        xml += `]]>\n`;
+        xml += `      </failure>\n`;
+    }
+
+    // System out zawsze zawiera szczegóły
+    xml += `      <system-out><![CDATA[\n`;
+    xml += `Request Name: ${requestName}\n`;
+    xml += `Path: ${stats.path || 'N/A'}\n`;
+    xml += `Total Requests: ${totalRequests}\n`;
+    xml += `Successful Requests (OK): ${okRequests}\n`;
+    xml += `Failed Requests (KO): ${koRequests}\n`;
+    xml += `Requests Per Second: ${stats.meanNumberOfRequestsPerSecond || 0}\n`;
+    xml += `Response Time (ms):\n`;
+    xml += `  Min: ${stats.minResponseTime || 0}\n`;
+    xml += `  50th Percentile: ${stats.percentiles1 || 0}\n`;
+    xml += `  75th Percentile: ${stats.percentiles2 || 0}\n`;
+    xml += `  95th Percentile: ${stats.percentiles3 || 0}\n`;
+    xml += `  99th Percentile: ${stats.percentiles4 || 0}\n`;
+    xml += `  Max: ${stats.maxResponseTime || 0}\n`;
+    xml += `  Mean: ${meanResponseTime}\n`;
+    xml += `  Standard Deviation: ${stats.standardDeviation || 0}\n`;
+    xml += `Response Time Groups:\n`;
+    xml += `  OK: t < 800 ms: ${stats.group1?.count || 0} (${stats.group1?.percentage || 0}%)\n`;
+    xml += `  OK: 800 ms <= t < 1200 ms: ${stats.group2?.count || 0} (${stats.group2?.percentage || 0}%)\n`;
+    xml += `  OK: t >= 1200 ms: ${stats.group3?.count || 0} (${stats.group3?.percentage || 0}%)\n`;
+    xml += `  KO: ${stats.group4?.count || 0} (${stats.group4?.percentage || 0}%)\n`;
+    xml += `]]></system-out>\n`;
+    xml += `    </testcase>\n`;
+    return xml;
+}
+
+
+/**
+ * Konwertuje statystyki Gatlinga na raport JUnit XML.
+ * @param {string} statsFilePath - Ścieżka do pliku ze statystykami Gatlinga (np. global_stats.js).
+ * @param {string} outputXmlPath - Ścieżka, gdzie ma zostać zapisany raport XML.
+ */
+async function convertGatlingStatsToJUnitXml(statsFilePath, outputXmlPath) {
+    let stats = {};
+    // Nazwa symulacji jest katalogiem nadrzędnym 'js', czyli nazwą jssimulation-XXXXXXXXX
+    let simulationName = path.basename(path.dirname(path.dirname(statsFilePath))); 
+    console.log(`[toXml.mjs] Nazwa symulacji wyciągnięta ze ścieżki: ${simulationName}`);
+
+    try {
+        stats = parseGatlingStatsFile(statsFilePath);
+        console.log(`[toXml.mjs] Statystyki wczytane i sparsowane pomyślnie. Łączna liczba żądań: ${stats.contents?.Global?.numberOfRequests?.total}`);
+    } catch (error) {
+        console.error(`[toXml.mjs] Błąd w convertGatlingStatsToJUnitXml podczas parsowania pliku statystyk: ${error.message}`);
+        throw error; // Rzucamy błąd dalej, aby główny skrypt mógł go obsłużyć
+    }
+
+    const count_tests = countTests(stats);
+    const count_failures = countFailures(stats);
+    const total_time = calculateTotalTime(stats);
+    console.log(`[toXml.mjs] Podsumowanie: Testów: ${count_tests}, Niepowodzeń: ${count_failures}, Czas: ${total_time}`);
+
+    let xml = `<?xml version="1.0" encoding="UTF-8"?>\n`;
+    xml += `<testsuites>\n`;
+    xml += `  <testsuite name="${simulationName}" tests="${count_tests}" failures="${count_failures}" errors="0" time="${total_time.toFixed(3)}" timestamp="${new Date().toISOString().slice(0, 19)}Z">\n`;
+
+    // Właściwości testsuite (ogólne metryki)
+    xml += `    <properties>\n`;
+    xml += `      <property name="simulation.name" value="${simulationName}"/>\n`;
+    xml += `      <property name="simulation.duration.seconds" value="${total_time.toString()}"/>\n`;
+    xml += `      <property name="requests.total" value="${stats.contents?.Global?.numberOfRequests?.total?.toString() || '0'}"/>\n`;
+    xml += `      <property name="requests.successful" value="${stats.contents?.Global?.numberOfRequests?.ok?.toString() || '0'}"/>\n`;
+    xml += `      <property name="requests.failed" value="${stats.contents?.Global?.numberOfRequests?.ko?.toString() || '0'}"/>\n`;
+    xml += `      <property name="mean.requests.per.second" value="${stats.contents?.Global?.meanNumberOfRequestsPerSecond?.toString() || '0'}"/>\n`;
+    xml += `      <property name="min.response.time.ms" value="${stats.contents?.Global?.minResponseTime?.toString() || '0'}"/>\n`;
+    xml += `      <property name="max.response.time.ms" value="${stats.contents?.Global?.maxResponseTime?.toString() || '0'}"/>\n`;
+    xml += `      <property name="mean.response.time.ms" value="${stats.contents?.Global?.meanResponseTime?.toString() || '0'}"/>\n`;
+    xml += `      <property name="stddev.response.time.ms" value="${stats.contents?.Global?.standardDeviation?.toString() || '0'}"/>\n`;
+    xml += `      <property name="p50.response.time.ms" value="${stats.contents?.Global?.percentiles1?.toString() || '0'}"/>\n`;
+    xml += `      <property name="p75.response.time.ms" value="${stats.contents?.Global?.percentiles2?.toString() || '0'}"/>\n`;
+    xml += `      <property name="p95.response.time.ms" value="${stats.contents?.Global?.percentiles3?.toString() || '0'}"/>\n`;
+    xml += `      <property name="p99.response.time.ms" value="${stats.contents?.Global?.percentiles4?.toString() || '0'}"/>\n`;
+    xml += `    </properties>\n`;
+
+    // Generowanie testcase'ów dla każdego elementu w stats.contents (np. Global, lub indywidualne żądania)
+    if (stats.contents) {
+        for (const key in stats.contents) {
+            if (Object.hasOwnProperty.call(stats.contents, key)) {
+                const requestStats = stats.contents[key];
+                const type = (key === "Global") ? "Global Request" : key; 
+                xml += addTestCase(requestStats, simulationName, type);
+            }
+        }
+    } else {
+        console.warn(`[toXml.mjs] Brak obiektu 'contents' w sparsowanych statystykach. Nie wygenerowano szczegółowych testcase'ów.`);
+    }
+
+
+    xml += `  </testsuite>\n`;
+    xml += `</testsuites>\n`;
+
+    try {
+        fs.writeFileSync(outputXmlPath, xml, 'utf8');
+        console.log(`[toXml.mjs] Raport JUnit XML został zapisany do pliku: ${outputXmlPath}`);
+    } catch (error) {
+        console.error(`[toXml.mjs] Błąd podczas zapisu pliku XML do ${outputXmlPath}: ${error.message}`);
+        throw error; // Rzucamy błąd dalej
+    }
+}
+
+// Eksportujemy funkcję, aby główny skrypt mógł ją zaimportować
+export { convertGatlingStatsToJUnitXml };
