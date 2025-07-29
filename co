@@ -25,7 +25,7 @@ function parseGatlingOutputLog(logContent) {
         p99ResponseTime: 0,
         meanThroughput: 0,
         simulationTimeSeconds: 0,
-        simulationName: "basicSimulation" // Z logu: "Simulation basicSimulation started..."
+        simulationName: "basicSimulation" // Domyślna nazwa, jeśli nie uda się jej wyciągnąć
     };
 
     // Parsowanie danych z logu tekstowego
@@ -45,6 +45,12 @@ function parseGatlingOutputLog(logContent) {
         stats.simulationTimeSeconds = parseInt(elapsedMatch[1]);
     }
 
+    // Nazwa symulacji z logu
+    const simulationNameMatch = logContent.match(/Simulation ([\w\d]+) started\.\.\./);
+    if (simulationNameMatch && simulationNameMatch[1]) {
+        stats.simulationName = simulationNameMatch[1];
+    }
+
     // Global Information
     const globalInfoMatches = logContent.matchAll(
         /(request count|min response time \(ms\)|max response time \(ms\)|mean response time \(ms\)|response time std deviation \(ms\)|response time 50th percentile \(ms\)|response time 75th percentile \(ms\)|response time 95th percentile \(ms\)|response time 99th percentile \(ms\)|mean throughput \(rps\))\s+\|\s+([\d,]+)\s+\|\s+([\d,]+)\s+\|\s+(?:[\d,-]+)/g
@@ -56,7 +62,7 @@ function parseGatlingOutputLog(logContent) {
         
         switch (metricName) {
             case 'request count':
-                if (stats.totalRequests === 0) stats.totalRequests = value;
+                if (stats.totalRequests === 0) stats.totalRequests = value; // Jeśli nie sparsowano wcześniej
                 break;
             case 'min response time (ms)':
                 stats.minResponseTime = value;
