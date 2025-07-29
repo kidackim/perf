@@ -1,110 +1,91 @@
-// raport.mjs
-// Główny skrypt odpowiedzialny za znajdowanie najnowszych wyników Gatlinga
-// i wywoływanie konwersji do JUnit XML oraz ewentualnie HTML.
+// raport.mjs (główny skrypt sterujący)
 
-import { execSync } from 'child_process';
-import { existsSync, readFileSync, statSync, readdirSync } from 'fs'; // Dodano readdirSync
+import { execSync } from 'child_process'; // Potrzebne do wywołania toHtml.mjs
+import { existsSync, readFileSync } from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { dirname, resolve as pathResolve } from 'path';
+import { dirname } from 'path';
 
-// Importujemy naszą funkcję do konwersji XML
-import { convertGatlingStatsToJUnitXml } from './toXml.mjs'; // Upewnij się, że nazwa pliku jest prawidłowa
-
-const GATLING_DIR = 'target/gatling'; // Domyślny katalog wyników Gatlinga
+// Importujemy funkcje do parsowania logu tekstowego i generowania raportu XML
+import { parseGatlingOutputLog, generateJUnitReportFromTextLog } from './generate_junit_report.mjs';
 
 async function main() {
     const _filename = fileURLToPath(import.meta.url);
     const _dirname = dirname(_filename);
 
-    console.log(`[raport.mjs] ===== Rozpoczęcie generowania raportów =====`);
-    console.log(`[raport.mjs] Bieżący katalog roboczy: ${process.cwd()}`);
-    console.log(`[raport.mjs] Katalog skryptu: ${_dirname}`);
+    console.log(`Katalog roboczy skryptu: ${process.cwd()}`);
+    console.log(`Katalog skryptu: ${_dirname}`);
 
-    const resolvedTargetDirectory = pathResolve(GATLING_DIR);
-    console.log(`[raport.mjs] Docelowy katalog raportów Gatlinga: ${resolvedTargetDirectory}`);
+    // Ścieżka do pliku logu Gatlinga
+    const LOG_FILE_PATH = path.join(process.cwd(), 'gatling_output.log'); // Domyślna nazwa i lokalizacja
+    const XML_OUTPUT_NAME = 'junit_report_from_log.xml';
+    const XML_OUTPUT_PATH = path.join(process.cwd(), XML_OUTPUT_NAME);
+    
+    // Nazwa katalogu docelowego dla raportów Gatlinga (jeśli toHtml.mjs tam coś zapisuje)
+    // Na podstawie Twojego logu: target/gatling
+    const resolvedTargetDirectory = path.join(process.cwd(), 'target', 'gatling'); 
+
+    // Nazwa pliku HTML, którą generuje toHtml.mjs (zakładana, na podstawie Twoich poprzednich zrzutów)
+    const HTML_OUTPUT_NAME = 'index.html'; // Często Gatling generuje index.html jako główny raport
+    const HTML_OUTPUT_PATH = path.join(resolvedTargetDirectory, HTML_OUTPUT_NAME);
+
 
     try {
-        if (!existsSync(GATLING_DIR)) {
-            console.error(`[raport.mjs] Błąd: Katalog Gatlinga "${GATLING_DIR}" nie istnieje w bieżącym katalogu roboczym. Upewnij się, że Gatling wygenerował raporty.`);
-            throw new Error(`Katalog "${GATLING_DIR}" nie istnieje.`);
-        } else {
-            console.log(`[raport.mjs] Katalog Gatlinga "${GATLING_DIR}" istnieje.`);
+        if (!existsSync(LOG_FILE_PATH)) {
+            console.error(`Błąd: Plik logu Gatlinga "${LOG_FILE_PATH}" nie istnieje. Upewnij się, że plik jest obecny.`);
+            throw new Error(`Plik logu Gatlinga nie znaleziony: ${LOG_FILE_PATH}`);
         }
+        console.log(`Znaleziono plik logu Gatlinga: ${LOG_FILE_PATH}`);
 
-        // Funkcja do znajdowania najnowszego katalogu symulacji (jssimulation-...)
-        function findLatestDir(baseDir) {
-            console.log(`[raport.mjs] Szukam najnowszego katalogu symulacji w: ${baseDir}`);
-            const dirs = readdirSync(baseDir, { withFileTypes: true }) // Użyj readdirSync
-                .filter(dirent => {
-                    const isDir = dirent.isDirectory();
-                    const startsWithSimulation = dirent.name.startsWith('jssimulation-');
-                    //console.log(`[raport.mjs] Sprawdzam katalog: ${dirent.name}, jest katalogiem: ${isDir}, zaczyna się od 'jssimulation-': ${startsWithSimulation}`);
-                    return isDir && startsWithSimulation;
-                })
-                .map(dirent => ({
-                    name: dirent.name,
-                    path: path.join(baseDir, dirent.name),
-                    mtime: statSync(path.join(baseDir, dirent.name)).mtime.getTime()
-                }))
-                .sort((a, b) => b.mtime - a.mtime); // Sortuj malejąco według daty modyfikacji
+        // Wczytujemy zawartość pliku logu
+        const logContent = readFileSync(LOG_FILE_PATH, 'utf8');
 
-            console.log(`[raport.mjs] Znalezione katalogi symulacji jssimulation-:`, dirs.map(d => d.name));
-            return dirs.length > 0 ? dirs[0].path : null;
-        }
+        // Parsujemy log i generujemy raport XML
+        const stats = parseGatlingOutputLog(logContent);
+        const junitXml = generateJUnitReportFromTextLog(stats);
 
-        const LATEST_DIR = findLatestDir(GATLING_DIR);
-        if (!LATEST_DIR) {
-            throw new Error(`[raport.mjs] Nie znaleziono żadnych katalogów symulacji 'jssimulation-' w ${GATLING_DIR}. Upewnij się, że symulacje Gatlinga zostały uruchomione i wygenerowały katalogi wyników.`);
-        }
-        console.log(`[raport.mjs] Znaleziono najnowszy katalog symulacji: ${LATEST_DIR}`);
+        // Zapisujemy raport XML do pliku
+        fs.writeFileSync(XML_OUTPUT_PATH, junitXml, 'utf8');
+        console.log(`Raport JUnit XML został wygenerowany do: ${XML_OUTPUT_PATH}`);
 
-        // Sciezka do pliku global_stats.js
-        const STATS_FILE = path.join(LATEST_DIR, 'js', 'global_stats.js');
-        console.log(`[raport.mjs] Oczekiwana ścieżka do pliku statystyk Gatlinga: ${STATS_FILE}`);
-        if (!existsSync(STATS_FILE)) {
-            throw new Error(`[raport.mjs] Błąd: Nie znaleziono pliku statystyk: ${STATS_FILE}. Upewnij się, że Gatling wygenerował ten plik w odpowiednim miejscu (folder js w katalogu symulacji).`);
-        }
-        console.log(`[raport.mjs] Plik statystyk (${STATS_FILE}) istnieje.`);
-
-        const XML_BASE_NAME = 'TEST-gatling-results.xml';
-        const resolvedXmlFile = path.join(resolvedTargetDirectory, XML_BASE_NAME);
-
-        console.log(`[raport.mjs] Rozpoczynam generowanie raportu XML do: ${resolvedXmlFile}`);
-        await convertGatlingStatsToJUnitXml(STATS_FILE, resolvedXmlFile);
-
-        if (!existsSync(resolvedXmlFile)) {
-            console.error(`[raport.mjs] Błąd krytyczny: Plik XML (${resolvedXmlFile}) nie istnieje po próbie generowania, mimo że funkcja convertGatlingStatsToJUnitXml nie zgłosiła błędu.`);
-            throw new Error(`Nie udało się wygenerować pliku XML: ${resolvedXmlFile}`);
-        }
-        console.log(`[raport.mjs] Raport XML został pomyślnie wygenerowany do: ${resolvedXmlFile}`);
-
-        // --- Sekcja dotycząca generowania raportu HTML (opcjonalnie) ---
-        // Zakładam, że masz osobny skrypt toHtml.mjs, który to robi.
-        // Jeśli nie, ten fragment kodu może być zakomentowany lub usunięty.
-        const HTML_BASE_NAME = 'index.html';
-        const resolvedHtmlFile = path.join(resolvedTargetDirectory, HTML_BASE_NAME);
-        console.log(`[raport.mjs] Sprawdzam istnienie raportu HTML w: ${resolvedHtmlFile}`);
+        // --- Logika generowania HTML (z zachowaniem wywołania do toHtml.mjs) ---
+        console.log(`Generowanie raportu HTML do: ${HTML_OUTPUT_PATH}`);
         
-        // Tutaj jest miejsce na wywołanie skryptu toHtml.mjs, jeśli go posiadasz
-        // np. execSync(`node your_to_html_script.mjs "${resolvedXmlFile}" "${resolvedHtmlFile}"`, { stdio: 'inherit' });
-        // Na ten moment zakładamy, że Gatling już sam generuje HTML, a my tylko sprawdzamy jego istnienie.
-
-        if (!existsSync(resolvedHtmlFile)) {
-            console.warn(`[raport.mjs] Ostrzeżenie: Plik HTML (${resolvedHtmlFile}) nie został znaleziony. Może to być normalne, jeśli Gatling generuje go w innym miejscu lub nie generujesz HTML z XML.`);
-        } else {
-            console.log(`[raport.mjs] Raport HTML został znaleziony: ${resolvedHtmlFile}`);
+        // Upewnij się, że katalog docelowy dla HTML istnieje, jeśli toHtml.mjs go wymaga
+        if (!existsSync(resolvedTargetDirectory)) {
+            fs.mkdirSync(resolvedTargetDirectory, { recursive: true });
+            console.log(`Utworzono katalog docelowy HTML: ${resolvedTargetDirectory}`);
         }
-        console.log(`[raport.mjs] Proces zakończony pomyślnie. Wszystkie wyniki powinny być w katalogu: ${resolvedTargetDirectory}`);
+
+        // Wywołujemy hipotetyczny skrypt toHtml.mjs
+        // Zakładamy, że toHtml.mjs przyjmuje ścieżkę do pliku XML i ścieżkę wyjściową HTML
+        // Jeśli toHtml.mjs ma inną sygnaturę, należy ją dostosować.
+        // Pamiętaj, że toHtml.mjs musi istnieć i być funkcjonalne.
+        try {
+            execSync(`node toHtml.mjs "${XML_OUTPUT_PATH}" "${HTML_OUTPUT_PATH}"`, { stdio: 'inherit' });
+            console.log(`Wywołano toHtml.mjs do wygenerowania raportu HTML.`);
+        } catch (htmlError) {
+            console.error(`Błąd podczas wywoływania toHtml.mjs: ${htmlError.message}`);
+            // Nie rzucamy tutaj błędu, jeśli generowanie HTML nie jest krytyczne dla ogólnego sukcesu.
+            // Możesz zmienić to zachowanie, jeśli generowanie HTML jest obowiązkowe.
+        }
+
+        if (existsSync(HTML_OUTPUT_PATH)) {
+            console.log(`Raport HTML został wygenerowany: ${HTML_OUTPUT_PATH}`);
+        } else {
+            console.warn(`Ostrzeżenie: Plik HTML "${HTML_OUTPUT_PATH}" nie został znaleziony po próbie generowania.`);
+        }
+        // --- Koniec logiki generowania HTML ---
+
+
+        console.log(`Proces zakończony pomyślnie. Wyniki w katalogu: ${process.cwd()}`);
 
     } catch (error) {
-        console.error(`[raport.mjs] Wystąpił błąd krytyczny podczas wykonywania skryptu głównego: ${error.message}`);
+        console.error(`Wystąpił błąd podczas wykonywania skryptu głównego: ${error.message}`);
         if (error.stack) {
             console.error(error.stack);
         }
-        process.exit(1); // Zakończ proces z kodem błędu
-    } finally {
-        console.log(`[raport.mjs] ===== Zakończono proces generowania raportów =====`);
+        process.exit(1);
     }
 }
 
