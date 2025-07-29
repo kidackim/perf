@@ -25,24 +25,24 @@ function parseGatlingOutputLog(logContent) {
         p99ResponseTime: 0,
         meanThroughput: 0,
         simulationTimeSeconds: 0,
-        [cite_start]simulationName: "basicSimulation" // Z logu: "Simulation basicSimulation started..." [cite: 1]
+        simulationName: "basicSimulation" // Z logu: "Simulation basicSimulation started..."
     };
 
     // Parsowanie danych z logu tekstowego
     // Te wyrażenia regularne są bardzo wrażliwe na zmiany w formacie logu Gatlinga.
 
     // Sekcja Requests (Total, OK, KO)
-    const requestsGlobalMatch = logContent.match(/> Global\s+\|\s+(\d+)\s+\|\s+(\d+)\s+\|\s+(\d+)/); [cite_start]// [cite: 3]
+    const requestsGlobalMatch = logContent.match(/> Global\s+\|\s+(\d+)\s+\|\s+(\d+)\s+\|\s+(\d+)/);
     if (requestsGlobalMatch) {
-        stats.totalRequests = parseInt(requestsGlobalMatch[1]); [cite_start]// [cite: 3]
-        stats.okRequests = parseInt(requestsGlobalMatch[2]); [cite_start]// [cite: 3]
-        stats.koRequests = parseInt(requestsGlobalMatch[3]); [cite_start]// [cite: 3]
+        stats.totalRequests = parseInt(requestsGlobalMatch[1]);
+        stats.okRequests = parseInt(requestsGlobalMatch[2]);
+        stats.koRequests = parseInt(requestsGlobalMatch[3]);
     }
 
     // Czas trwania symulacji
-    const elapsedMatch = logContent.match(/(\d+)s elapsed/); [cite_start]// [cite: 2]
+    const elapsedMatch = logContent.match(/(\d+)s elapsed/);
     if (elapsedMatch) {
-        stats.simulationTimeSeconds = parseInt(elapsedMatch[1]); [cite_start]// [cite: 2]
+        stats.simulationTimeSeconds = parseInt(elapsedMatch[1]);
     }
 
     // Global Information
@@ -56,34 +56,34 @@ function parseGatlingOutputLog(logContent) {
         
         switch (metricName) {
             case 'request count':
-                if (stats.totalRequests === 0) stats.totalRequests = value; [cite_start]// [cite: 6]
+                if (stats.totalRequests === 0) stats.totalRequests = value;
                 break;
             case 'min response time (ms)':
-                stats.minResponseTime = value; [cite_start]// [cite: 7]
+                stats.minResponseTime = value;
                 break;
             case 'max response time (ms)':
-                stats.maxResponseTime = value; [cite_start]// [cite: 8]
+                stats.maxResponseTime = value;
                 break;
             case 'mean response time (ms)':
-                stats.meanResponseTime = value; [cite_start]// [cite: 9]
+                stats.meanResponseTime = value;
                 break;
             case 'response time std deviation (ms)':
-                stats.stdDevResponseTime = value; [cite_start]// [cite: 10]
+                stats.stdDevResponseTime = value;
                 break;
             case 'response time 50th percentile (ms)':
-                stats.p50ResponseTime = value; [cite_start]// [cite: 11]
+                stats.p50ResponseTime = value;
                 break;
             case 'response time 75th percentile (ms)':
-                stats.p75ResponseTime = value; [cite_start]// [cite: 12]
+                stats.p75ResponseTime = value;
                 break;
             case 'response time 95th percentile (ms)':
-                stats.p95ResponseTime = value; [cite_start]// [cite: 13]
+                stats.p95ResponseTime = value;
                 break;
             case 'response time 99th percentile (ms)':
-                stats.p99ResponseTime = value; [cite_start]// [cite: 14]
+                stats.p99ResponseTime = value;
                 break;
             case 'mean throughput (rps)':
-                stats.meanThroughput = value; [cite_start]// [cite: 15]
+                stats.meanThroughput = value;
                 break;
         }
     }
