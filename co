@@ -1,92 +1,168 @@
-// raport.mjs (główny skrypt sterujący)
+// Ten kod generuje profesjonalny raport JUnit XML bazując na zagregowanych danych
+// z pliku logu Gatlinga (gatling_output.log).
+// Nie jest możliwe generowanie szczegółowych testcase'ów dla każdego żądania,
+// ponieważ log zawiera tylko zagregowane statystyki.
 
-import { execSync } from 'child_process'; // Potrzebne do wywołania toHtml.mjs
-import { existsSync, readFileSync } from 'fs';
+import { create } from 'xmlbuilder2';
+import fs from 'fs';
 import path from 'path';
-import { fileURLToPath } from 'url';
-import { dirname } from 'path';
 
-// Importujemy funkcje do parsowania logu tekstowego i generowania raportu XML
-import { parseGatlingOutputLog, generateJUnitReportFromTextLog } from './generate_junit_report.mjs';
+async function generateJUnitReport(logContent, logFilePath) { // Dodano logFilePath jako argument
+    let totalRequests = 0;
+    let okRequests = 0;
+    let koRequests = 0;
+    let minResponseTime = 0;
+    let maxResponseTime = 0;
+    let meanResponseTime = 0;
+    let stdDevResponseTime = 0;
+    let p50ResponseTime = 0;
+    let p75ResponseTime = 0;
+    let p95ResponseTime = 0;
+    let p99ResponseTime = 0;
+    let meanThroughput = 0;
+    let simulationTimeSeconds = 0;
+    let simulationName = "basicSimulation"; // Nazwa symulacji z logu, domyślna
 
-async function main() {
-    const _filename = fileURLToPath(import.meta.url);
-    const _dirname = dirname(_filename);
-
-    console.log(`Katalog roboczy skryptu: ${process.cwd()}`);
-    console.log(`Katalog skryptu: ${_dirname}`);
-
-    // Ścieżka do pliku logu Gatlinga
-    const LOG_FILE_PATH = path.join(process.cwd(), 'gatling_output.log'); // Domyślna nazwa i lokalizacja
-    const XML_OUTPUT_NAME = 'junit_report_from_log.xml';
-    const XML_OUTPUT_PATH = path.join(process.cwd(), XML_OUTPUT_NAME);
-    
-    // Nazwa katalogu docelowego dla raportów Gatlinga (jeśli toHtml.mjs tam coś zapisuje)
-    // Na podstawie Twojego logu: target/gatling
-    const resolvedTargetDirectory = path.join(process.cwd(), 'target', 'gatling'); 
-
-    // Nazwa pliku HTML, którą generuje toHtml.mjs (zakładana, na podstawie Twoich poprzednich zrzutów)
-    const HTML_OUTPUT_NAME = 'index.html'; // Często Gatling generuje index.html jako główny raport
-    const HTML_OUTPUT_PATH = path.join(resolvedTargetDirectory, HTML_OUTPUT_NAME);
-
-
-    try {
-        if (!existsSync(LOG_FILE_PATH)) {
-            console.error(`Błąd: Plik logu Gatlinga "${LOG_FILE_PATH}" nie istnieje. Upewnij się, że plik jest obecny.`);
-            throw new Error(`Plik logu Gatlinga nie znaleziony: ${LOG_FILE_PATH}`);
-        }
-        console.log(`Znaleziono plik logu Gatlinga: ${LOG_FILE_PATH}`);
-
-        // Wczytujemy zawartość pliku logu
-        const logContent = readFileSync(LOG_FILE_PATH, 'utf8');
-
-        // Parsujemy log i generujemy raport XML
-        const stats = parseGatlingOutputLog(logContent);
-        const junitXml = generateJUnitReportFromTextLog(stats);
-
-        // Zapisujemy raport XML do pliku
-        fs.writeFileSync(XML_OUTPUT_PATH, junitXml, 'utf8');
-        console.log(`Raport JUnit XML został wygenerowany do: ${XML_OUTPUT_PATH}`);
-
-        // --- Logika generowania HTML (z zachowaniem wywołania do toHtml.mjs) ---
-        console.log(`Generowanie raportu HTML do: ${HTML_OUTPUT_PATH}`);
-        
-        // Upewnij się, że katalog docelowy dla HTML istnieje, jeśli toHtml.mjs go wymaga
-        if (!existsSync(resolvedTargetDirectory)) {
-            fs.mkdirSync(resolvedTargetDirectory, { recursive: true });
-            console.log(`Utworzono katalog docelowy HTML: ${resolvedTargetDirectory}`);
-        }
-
-        // Wywołujemy hipotetyczny skrypt toHtml.mjs
-        // Zakładamy, że toHtml.mjs przyjmuje ścieżkę do pliku XML i ścieżkę wyjściową HTML
-        // Jeśli toHtml.mjs ma inną sygnaturę, należy ją dostosować.
-        // Pamiętaj, że toHtml.mjs musi istnieć i być funkcjonalne.
-        try {
-            execSync(`node toHtml.mjs "${XML_OUTPUT_PATH}" "${HTML_OUTPUT_PATH}"`, { stdio: 'inherit' });
-            console.log(`Wywołano toHtml.mjs do wygenerowania raportu HTML.`);
-        } catch (htmlError) {
-            console.error(`Błąd podczas wywoływania toHtml.mjs: ${htmlError.message}`);
-            // Nie rzucamy tutaj błędu, jeśli generowanie HTML nie jest krytyczne dla ogólnego sukcesu.
-            // Możesz zmienić to zachowanie, jeśli generowanie HTML jest obowiązkowe.
-        }
-
-        if (existsSync(HTML_OUTPUT_PATH)) {
-            console.log(`Raport HTML został wygenerowany: ${HTML_OUTPUT_PATH}`);
-        } else {
-            console.warn(`Ostrzeżenie: Plik HTML "${HTML_OUTPUT_PATH}" nie został znaleziony po próbie generowania.`);
-        }
-        // --- Koniec logiki generowania HTML ---
-
-
-        console.log(`Proces zakończony pomyślnie. Wyniki w katalogu: ${process.cwd()}`);
-
-    } catch (error) {
-        console.error(`Wystąpił błąd podczas wykonywania skryptu głównego: ${error.message}`);
-        if (error.stack) {
-            console.error(error.stack);
-        }
-        process.exit(1);
+    // --- PARSOWANIE DANYCH Z gatling_output.log ---
+    // Całkowity czas symulacji
+    const elapsedMatch = logContent.match(/(\d+)s elapsed/);
+    if (elapsedMatch) {
+        simulationTimeSeconds = parseInt(elapsedMatch[1]);
     }
+
+    // Liczba żądań Global
+    const globalRequestsMatch = logContent.match(/> Global\s+\|\s+(\d+)\s+\|\s+(\d+)\s+\|\s+(\d+)/);
+    if (globalRequestsMatch) {
+        totalRequests = parseInt(globalRequestsMatch[1]);
+        okRequests = parseInt(globalRequestsMatch[2]);
+        koRequests = parseInt(globalRequestsMatch[3]);
+    }
+
+    // Statystyki czasów odpowiedzi z sekcji "Global Information"
+    const globalInfoLines = [];
+    const globalInfoRegex = /\|\s*([\d,]+)\s*\|\s*([\d,]+)\s*\|\s*([-\d,]*)\s*$/gm;
+    let match;
+    while ((match = globalInfoRegex.exec(logContent)) !== null) {
+        globalInfoLines.push(match[1].replace(/,/g, ''));
+    }
+
+    if (globalInfoLines.length >= 10) {
+        minResponseTime = parseInt(globalInfoLines[1]);
+        maxResponseTime = parseInt(globalInfoLines[2]);
+        meanResponseTime = parseInt(globalInfoLines[3]);
+        stdDevResponseTime = parseInt(globalInfoLines[4]);
+        p50ResponseTime = parseInt(globalInfoLines[5]);
+        p75ResponseTime = parseInt(globalInfoLines[6]);
+        p95ResponseTime = parseInt(globalInfoLines[7]);
+        p99ResponseTime = parseInt(globalInfoLines[8]);
+        meanThroughput = parseInt(globalInfoLines[9]);
+    }
+    // --- KONIEC PARSOWANIA ---
+
+    const root = create({ version: '1.0', encoding: 'UTF-8' })
+        .ele('testsuites');
+
+    const testsuite = root.ele('testsuite', {
+        name: `Gatling Performance Test - ${simulationName}`,
+        tests: totalRequests,
+        failures: koRequests,
+        errors: 0,
+        time: simulationTimeSeconds.toFixed(3),
+        timestamp: new Date().toISOString().slice(0, 19) + 'Z'
+    });
+
+    // Dodajemy właściwości testsuite (ogólne metryki)
+    const properties = testsuite.ele('properties');
+    properties.ele('property', { name: 'simulation.name', value: simulationName });
+    properties.ele('property', { name: 'simulation.duration.seconds', value: simulationTimeSeconds.toString() });
+    properties.ele('property', { name: 'requests.total', value: totalRequests.toString() });
+    properties.ele('property', { name: 'requests.ok', value: okRequests.toString() });
+    properties.ele('property', { name: 'requests.ko', value: koRequests.toString() });
+    properties.ele('property', { name: 'response.time.min.ms', value: minResponseTime.toString() });
+    properties.ele('property', { name: 'response.time.max.ms', value: maxResponseTime.toString() });
+    properties.ele('property', { name: 'response.time.mean.ms', value: meanResponseTime.toString() });
+    properties.ele('property', { name: 'response.time.stddev.ms', value: stdDevResponseTime.toString() });
+    properties.ele('property', { name: 'response.time.50th.percentile.ms', value: p50ResponseTime.toString() });
+    properties.ele('property', { name: 'response.time.75th.percentile.ms', value: p75ResponseTime.toString() });
+    properties.ele('property', { name: 'response.time.95th.percentile.ms', value: p95ResponseTime.toString() });
+    properties.ele('property', { name: 'response.time.99th.percentile.ms', value: p99ResponseTime.toString() });
+    properties.ele('property', { name: 'throughput.mean.rps', value: meanThroughput.toString() });
+
+    // --- TestCase: Podsumowanie sukcesów/porażek Globalnych ---
+    const summaryTestCase = testsuite.ele('testcase', {
+        name: 'Global Requests Summary',
+        classname: 'Gatling.Simulation.Summary',
+        time: (simulationTimeSeconds).toFixed(3)
+    });
+    if (koRequests > 0) {
+        summaryTestCase.ele('failure', {
+            message: `Performance test failed: ${koRequests} out of ${totalRequests} requests failed globally.`
+        }).txt(`Total Requests: ${totalRequests}, OK: ${okRequests}, KO: ${koRequests}.` +
+               `Min Response Time: ${minResponseTime}ms, Max Response Time: ${maxResponseTime}ms, Mean Response Time: ${meanResponseTime}ms.`);
+    } else {
+        summaryTestCase.ele('system-out').txt(`All ${totalRequests} global requests completed successfully.`);
+    }
+
+    // --- TestCase: Średni czas odpowiedzi ---
+    testsuite.ele('testcase', {
+        name: 'Global Mean Response Time',
+        classname: 'Gatling.Simulation.ResponseTime.Mean',
+        time: (meanResponseTime / 1000).toFixed(3)
+    }).ele('system-out').txt(`Mean response time for all global requests: ${meanResponseTime} ms.`);
+
+    // --- TestCase: Percentyle czasu odpowiedzi ---
+    testsuite.ele('testcase', {
+        name: 'Global Response Time Percentiles',
+        classname: 'Gatling.Simulation.ResponseTime.Percentiles',
+        time: (p99ResponseTime / 1000).toFixed(3)
+    }).ele('system-out').txt(
+        `Global Response Time Percentiles (ms):
+        50th Percentile: ${p50ResponseTime}
+        75th Percentile: ${p75ResponseTime}
+        95th Percentile: ${p95ResponseTime}
+        99th Percentile: ${p99ResponseTime}`
+    );
+
+    // --- TestCase: Przepustowość ---
+    testsuite.ele('testcase', {
+        name: 'Global Mean Throughput (RPS)',
+        classname: 'Gatling.Simulation.Throughput',
+        time: (totalRequests / meanThroughput / 1000).toFixed(3)
+    }).ele('system-out').txt(`Global Mean Throughput: ${meanThroughput} requests/second.`);
+
+    const xmlString = root.end({ prettyPrint: true });
+    return xmlString;
+}
+
+// Przykład użycia
+async function main() {
+    // Zakładamy, że plik logu jest przekazany jako pierwszy argument
+    const logFilePath = process.argv[2];
+    if (!logFilePath) {
+        console.error('Użycie: node raport.mjs <ścieżka_do_gatling_output.log>');
+        console.error('Przykład: node raport.mjs /path/to/your/gatling_output.log');
+        return;
+    }
+
+    let logContent = '';
+    try {
+        logContent = fs.readFileSync(logFilePath, 'utf8');
+    } catch (error) {
+        console.error(`Błąd podczas wczytywania pliku logu: ${logFilePath} - ${error.message}`);
+        return;
+    }
+
+    // Wyznaczenie katalogu, w którym znajduje się plik logu
+    const logDir = path.dirname(logFilePath);
+    // Domyślna nazwa pliku wyjściowego
+    const outputFileName = 'TEST-gatling-results.xml';
+    // Pełna ścieżka do pliku wyjściowego
+    const outputFilePath = path.join(logDir, outputFileName);
+
+    // Przekazujemy logFilePath do generateJUnitReport, aby ewentualnie użyć go do nazwy symulacji
+    const junitXml = await generateJUnitReport(logContent, logFilePath);
+    fs.writeFileSync(outputFilePath, junitXml);
+    console.log(`Raport JUnit XML został wygenerowany do: ${outputFilePath}`);
 }
 
 main();
