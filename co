@@ -1,10 +1,42 @@
- - name: Ensure /app/target directory exists and has correct permissions for container user
-      ansible.builtin.file:
-        path: /app/target
-        state: directory
-        mode: '0775'
-        owner: '1001'
-        group: '1001'
-      become: true
-      become_user: root
-      tags: [ 'permissions' ]
+- name: Run Docker/Podman image in detached mode and get container ID
+      ansible.builtin.shell: |
+        "{{ docker_cmd }} run -d --rm \
+        -v /app/target:/app/target \
+        -e TOKEN_PASSWORD={{ container_env_TOKEN_PASSWORD | quote }} \
+        -e GATLING_USERS={{ container_env_GATLING_USERS | quote }} \
+        -e SIMULATION_NAME={{ container_env_SIMULATION_NAME | quote }} \
+        {{ image_to_run_name | quote }}"
+      args:
+        warn: false
+      register: run_container_detached_result
+      when: image_check.stdout | length > 0
+      failed_when: run_container_detached_result.rc != 0
+
+    - name: Debug container ID
+      ansible.builtin.debug:
+        msg: "Container ID: {{ run_container_detached_result.stdout }}"
+      tags: [ 'debug' ]
+      when: run_container_detached_result is defined and run_container_detached_result.rc == 0
+
+    - name: Wait for the container to complete its task
+      ansible.builtin.shell: |
+        "{{ docker_cmd }} wait {{ run_container_detached_result.stdout }}"
+      register: wait_container_result
+      when: run_container_detached_result is defined and run_container_detached_result.rc == 0
+      failed_when: wait_container_result.rc != 0 and wait_container_result.stdout | int != 0
+
+    - name: Display container's exit code
+      ansible.builtin.debug:
+        msg: "Container {{ run_container_detached_result.stdout }} exited with code: {{ wait_container_result.stdout }}"
+      tags: [ 'debug' ]
+      when: wait_container_result is defined
+
+    # --- NOWY KROK: Kopiowanie pliku XML z kontenera na hosta ---
+    - name: Copy JUnit report from container to remote host
+      ansible.builtin.shell: |
+        "{{ docker_cmd }} cp {{ run_container_detached_result.stdout }}:{{ container_junit_report_path }} {{ remote_host_temp_report_path }}"
+      args:
+        warn: false
+      register: cp_report_result
+      when: wait_container_result is defined and wait_container_result.rc == 0
+      failed_when: cp_report_result.rc != 0
