@@ -1,14 +1,9 @@
- - script: |
-        echo "Executing 'docker load' on specified host"
-        cd $(System.DefaultWorkingDirectory)/playbooks/
-        ansible-playbook docker_load.yml \
-        -i stix04021.ping.ad \
-        -e ansible_user='$(parameters.hostname)' \
-        -e ansible_password='$(parameters.hostname | PASS)' \
-        -e "build_id_from_pipeline=$(Build.BuildId)" \
-        -e "image_to_run_name=p08399hceacr.azurecr.io/p08399/gatling-test:$(Build.BuildId)" \
-        -e "TOKEN_PASSWORD=$(TOKEN_PASSWORD)" \
-        -e "GATLING_USERS=$(GATLING_USERS)" \
-        -e "SIMULATION_NAME=$(SIMULATION_NAME)"
-      displayName: 'Perform docker load on remote host'
-      condition: succeeded()
+  # NOWY KROK: Opublikuj wyniki testów JUnit w Azure DevOps
+    - task: PublishTestResults@2
+      inputs:
+        testResultsFormat: 'JUnit'
+        testResultsFiles: '$(System.DefaultWorkingDirectory)/playbooks/fetched_reports/test-results.xml' # Ścieżka do pobranego pliku
+        mergeTestResults: true
+        testRunTitle: 'Gatling Performance Test Results'
+      displayName: 'Publish JUnit Test Results'
+      condition: always() # Uruchom zawsze, nawet jeśli poprzednie kroki zawiodły, aby zobaczyć wyniki testów
