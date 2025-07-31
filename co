@@ -1,25 +1,3 @@
-  - name: Clean up only directories in {{ base_docker_path }}
-      ansible.builtin.find:
-        paths: "{{ base_docker_path }}"
-        file_type: directory
-        # Możesz dodać wzorzec, jeśli chcesz usuwać tylko konkretne foldery, np. patterns: "skopeoCopy-*"
-        # Bez patterns, usunie WSZYSTKIE podkatalogi.
-      register: found_dirs_to_delete
-      tags: [ 'cleanup' ]
-
-    - name: Remove identified directories from {{ base_docker_path }}
-      ansible.builtin.file:
-        path: "{{ item.path }}"
-        state: absent
-      loop: "{{ found_dirs_to_delete.files }}"
-      when: found_dirs_to_delete.files | length > 0
-      register: remove_dirs_result
-      changed_when: remove_dirs_result.results | selectattr('changed', 'equalto', true) | list | length > 0
-      failed_when: false # Nie zawiedź, jeśli nie ma folderów do usunięcia
-      tags: [ 'cleanup' ]
-
-    - name: Display directory cleanup result
-      ansible.builtin.debug:
-        msg: "Only directories cleanup result: {{ remove_dirs_result }}"
-      tags: [ 'debug', 'cleanup' ]
-      when: remove_dirs_result is defined
+podman ps -q | xargs -r podman stop && \
+podman ps -aq | xargs -r podman rm && \
+podman images -q | xargs -r podman rmi
