@@ -1,18 +1,18 @@
-    - task: ArchiveFiles@2
-      displayName: 'Skompresuj Całą Zawartość Target'
+- task: ArchiveFiles@2
+      displayName: 'Compress All Target Contents' # Translated display name
       inputs:
-        # Pamiętaj, fetch tworzy podfolder z nazwą hosta, np. /fetched_all_target_contents/your_remote_host_name/app/target/all_target_contents/
-        rootFolderOrFile: '$(System.DefaultWorkingDirectory)/fetched_all_target_contents/{{ inventory_hostname }}/app/target/all_target_contents/' # <--- DOKŁADNA ŚCIEŻKA po fetchu
-        includeRootFolder: true # Czy skompresować także sam folder 'all_target_contents' wewnątrz archiwum
+        # Remember, 'fetch' creates a subfolder with the hostname, e.g., /fetched_all_target_contents/your_remote_host_name/app/target/all_target_contents/
+        rootFolderOrFile: '$(System.DefaultWorkingDirectory)/fetched_all_target_contents/{{ inventory_hostname }}/app/target/all_target_contents/' # <--- PRECISE PATH after fetch
+        includeRootFolder: true # Whether to also compress the 'all_target_contents' folder itself inside the archive
         archiveType: 'zip'
-        archiveFile: '$(Build.ArtifactStagingDirectory)/full_target_contents_$(Build.BuildId).zip' # Nazwa nowego archiwum
+        archiveFile: '$(Build.ArtifactStagingDirectory)/full_target_contents_$(Build.BuildId).zip' # New archive name
         replaceExistingArchive: true
-      condition: succeeded() # Uruchom, jeśli Ansible Playbook powiódł się (w tym fetch)
+      condition: succeeded() # Run if Ansible Playbook succeeded (including fetch)
 
     - task: PublishBuildArtifacts@1
-      displayName: 'Opublikuj Archiwum Pełnego Target jako Artefakt'
+      displayName: 'Publish Full Target Archive as Artifact' # Translated display name
       inputs:
-        pathToPublish: '$(Build.ArtifactStagingDirectory)/full_target_contents_$(Build.BuildId).zip' # Ścieżka do skompresowanego pliku
-        artifactName: 'FullTargetContentsArchive' # <--- Nowa, unikalna nazwa artefaktu
+        pathToPublish: '$(Build.ArtifactStagingDirectory)/full_target_contents_$(Build.BuildId).zip' # Path to the compressed file
+        artifactName: 'FullTargetContentsArchive' # <--- New, unique artifact name
         publishLocation: 'Container'
       condition: succeeded()
