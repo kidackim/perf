@@ -1,16 +1,1 @@
-   - name: Run the newly loaded Docker/Podman image with environment variables
-      ansible.builtin.shell: |
-        "{{ docker_cmd }} run -d --rm \
-        -v /app/target:/app/target \
-        -e TOKEN_PASSWORD='{{ TOKEN_PASSWORD_PLACEHOLDER }}' \ # Zmienna placeholder w komendzie
-        -e GATLING_USERS='{{ GATLING_USERS_PLACEHOLDER }}' \   # Zmienna placeholder w komendzie
-        -e SIMULATION_NAME='{{ SIMULATION_NAME_PLACEHOLDER }}' \ # Zmienna placeholder w komendzie
-        {{ image_to_run_name | quote }}"
-      args:
-        warn: false
-      environment: # <-- DODANE: Parametr environment
-        TOKEN_PASSWORD_PLACEHOLDER: "{{ container_env_TOKEN_PASSWORD }}"
-        GATLING_USERS_PLACEHOLDER: "{{ container_env_GATLING_USERS }}"
-        SIMULATION_NAME_PLACEHOLDER: "{{ container_env_SIMULATION_NAME }}"
-      register: run_container_detached_result
-      failed_when: run_container_detached_result.rc != 0
+    echo "DEBUG: Sprawdzam wartość sekretu B9802677-PASS: $(B9802677-PASS)"
