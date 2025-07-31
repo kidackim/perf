@@ -1,3 +1,18 @@
-TOKEN_PASSWORD_PLACEHOLDER: "{{ TOKEN_PASSWORD }}"
-        GATLING_USERS_PLACEHOLDER: "{{ GATLING_USERS }}"
-        SIMULATION_NAME_PLACEHOLDER: "{{ SIMULATION_NAME }}"
+   - name: Run Docker/Podman image in detached mode and get container ID
+      ansible.builtin.command:
+        argv:
+          - "{{ full_podman_path }}"
+          - "run"
+          - "-d"
+          - "--rm"
+          - "-v"
+          - "/app/target:/app/target"
+          - "-e"
+          - "TOKEN_PASSWORD={{ TOKEN_PASSWORD }}" # Wartość z Ansible
+          - "-e"
+          - "GATLING_USERS={{ GATLING_USERS }}"
+          - "-e"
+          - "SIMULATION_NAME={{ SIMULATION_NAME }}"
+          - "{{ image_to_run_name }}"
+      register: run_container_detached_result
+      failed_when: run_container_detached_result.rc != 0
