@@ -1,17 +1,17 @@
-- name: Global cleanup of all Podman/Docker containers and images
+ - name: Copy entire Target folder from container to remote host
       ansible.builtin.shell: |
-        "{{ full_podman_path }} ps -q | xargs -r {{ full_podman_path }} stop && \
-         {{ full_podman_path }} ps -aq | xargs -r {{ full_podman_path }} rm && \
-         {{ full_podman_path }} images -q | xargs -r {{ full_podman_path }} rmi"
+        "{{ docker_cmd }}" cp "{{ run_container_detached_result.stdout }}":/app/target/ /app/target/all_target_contents/
       args:
         warn: false
-      changed_when: true # Zakładamy, że zawsze coś do posprzątania lub stan mógł się zmienić
-      register: global_cleanup_result
-      failed_when: false # Nie zawiedź, nawet jeśli nie ma nic do usunięcia
-      tags: [ 'cleanup' ]
+      register: cp_full_target_result
+      when: wait_container_result is defined and wait_container_result.rc == 0 # Upewnij się, że kontener zakończył pracę
+      failed_when: cp_full_target_result.rc != 0
 
-    - name: Display global cleanup result
-      ansible.builtin.debug:
-        msg: "Global cleanup result: {{ global_cleanup_result.stdout }}"
-      tags: [ 'debug', 'cleanup' ]
-      when: global_cleanup_result is defined
+    - name: Fetch entire Target directory from remote host
+      ansible.builtin.fetch:
+        src: '/app/target/all_target_contents/' # <--- WAŻNE: Ścieżka do nowo skopiowanego folderu na HOŚCIE
+        dest: './fetched_all_target_contents/' # <--- Nowa, dedykowana lokalizacja na AGENCIE AZURE DEVOPS
+        flat: no # WAŻNE: 'no' zachowa pełną strukturę katalogów
+      register: fetch_all_target_result
+      ignore_errors: yes
+      when: cp_full_target_result is defined and cp_full_target_result.rc == 0 # Upewnij się, że kopiowanie z dockera na hosta się powiodło
