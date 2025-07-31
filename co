@@ -1,3 +1,17 @@
-podman ps -q | xargs -r podman stop && \
-podman ps -aq | xargs -r podman rm && \
-podman images -q | xargs -r podman rmi
+- name: Global cleanup of all Podman/Docker containers and images
+      ansible.builtin.shell: |
+        "{{ full_podman_path }} ps -q | xargs -r {{ full_podman_path }} stop && \
+         {{ full_podman_path }} ps -aq | xargs -r {{ full_podman_path }} rm && \
+         {{ full_podman_path }} images -q | xargs -r {{ full_podman_path }} rmi"
+      args:
+        warn: false
+      changed_when: true # Zakładamy, że zawsze coś do posprzątania lub stan mógł się zmienić
+      register: global_cleanup_result
+      failed_when: false # Nie zawiedź, nawet jeśli nie ma nic do usunięcia
+      tags: [ 'cleanup' ]
+
+    - name: Display global cleanup result
+      ansible.builtin.debug:
+        msg: "Global cleanup result: {{ global_cleanup_result.stdout }}"
+      tags: [ 'debug', 'cleanup' ]
+      when: global_cleanup_result is defined
