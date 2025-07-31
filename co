@@ -76,7 +76,6 @@
         msg: "ERROR: Docker/Podman image '{{ image_to_run_name }}' not found on host for execution."
       when: image_existence_check.stdout | length == 0
 
-    # --- POPRAWKA W TYM BLOKU: Liniach 61-62 w Twoim pliku
     - name: Run Docker/Podman image in detached mode and get container ID
       ansible.builtin.shell: |
         "{{ docker_cmd }} run -d --rm \
@@ -88,7 +87,6 @@
       args:
         warn: false
       register: run_container_detached_result
-      # Oddzielone, aby uniknąć problemów z linterem
       failed_when: run_container_detached_result.rc != 0
 
     - name: Debug container ID
@@ -104,7 +102,7 @@
       when:
         - run_container_detached_result is defined
         - run_container_detached_result.rc == 0
-      failed_when: wait_container_result.rc != 0 and wait_container_result.stdout | int != 0
+      failed_when: "wait_container_result.rc != 0 and wait_container_result.stdout | int != 0" # <-- Zmiana tutaj: całe wyrażenie w cudzysłowach
 
     - name: Display container's exit code
       ansible.builtin.debug:
@@ -195,14 +193,11 @@
         - found_docker_folders.files | length == 1
         - not tar_file_status_direct.stat.exists
 
-    # --- POPRAWKA W TYM BLOKU: Liniach 99-102 w Twoim pliku
     - name: Set final_tar_path if .tar file found in folder
       ansible.builtin.set_fact:
         final_tar_path: "{{ found_docker_folders.files[0].path }}/{{ current_image_tar_file_name }}"
-      when:
-        - tar_file_status_in_folder is defined
-        - tar_file_status_in_folder.stat.exists
-        - final_tar_path == "" # Upewnij się, że nie został już ustawiony
+      # --- POPRAWKA W TYM BLOKU: Liniach 99-102 w Twoim pliku
+      when: "tar_file_status_in_folder is defined and tar_file_status_in_folder.stat.exists and final_tar_path == ''" # <-- Zmiana tutaj: całe wyrażenie w cudzysłowach
 
     - name: Debug: Final tar path for load
       ansible.builtin.debug:
@@ -247,7 +242,8 @@
         state: absent
       loop: "{{ lookup('fileglob', base_docker_path + '/*') }}"
       register: cleanup_dir_result
-      changed_when: cleanup_dir_result.results | selectattr('changed', 'equalto', true) | list | length > 0
+      # --- POPRAWKA W TYM BLOKU: Liniach 207-208 w Twoim pliku
+      changed_when: "cleanup_dir_result.results | selectattr('changed', 'equalto', true) | list | length > 0" # <-- Zmiana tutaj: całe wyrażenie w cudzysłowach
       failed_when: false
       tags: [ 'cleanup' ]
 
