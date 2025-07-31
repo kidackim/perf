@@ -1,29 +1,42 @@
 ---
 - name: Dynamically run Docker image, fetch report, load new image, and clean up
   hosts: all
-  gather_facts: false
+  gather_facts: false # Może być potrzebne gather_facts: true jeśli polegasz na ansible_facts.distribution
   become: true
   become_user: root
   become_method: sudo
 
   vars:
-    base_docker_path: "/app/docker/images"
-    build_id_from_pipeline: "{{ build_id_from_pipeline }}"
-    image_to_run_name: "{{ image_to_run_name }}"
+    # Zmienne, które mają być przekazane jako extra-vars z Azure DevOps
+    # Upewnij się, że są one przekazywane w linii poleceń Ansible playbook
+    build_id_from_pipeline: "{{ build_id_from_pipeline | default('unknown_build_id') }}"
+    image_to_run_name: "{{ image_to_run_name | default('unknown_image_name') }}"
+    TOKEN_PASSWORD: "{{ TOKEN_PASSWORD | default('default_token') }}"
+    GATLING_USERS: "{{ GATLING_USERS | default('1') }}"
+    SIMULATION_NAME: "{{ SIMULATION_NAME | default('default_simulation') }}"
+
+    # Odczytujemy zmienne kontenera z tych przekazanych extra-vars
     container_env_TOKEN_PASSWORD: "{{ TOKEN_PASSWORD }}"
     container_env_GATLING_USERS: "{{ GATLING_USERS }}"
     container_env_SIMULATION_NAME: "{{ SIMULATION_NAME }}"
 
-    docker_cmd: "podman"
+    docker_cmd: "podman" # Lub "docker", w zależności od Twojego środowiska
 
-    container_junit_report_path: "/app/target/results/TEST-results.xml"
+    # Zmienne dla raportów JUnit
+    # Ścieżka do raportu XML WEWNĄTRZ KONTENERA (MUSISZ UPEWNIĆ SIĘ, ŻE TO POPRAWNA ŚCIEŻKA!)
+    container_junit_report_path: "/app/target/results/TEST-results.xml" # PRZYKŁAD! Dostosuj do faktycznej ścieżki Gatlinga
+    # Ścieżka tymczasowa na HOŚCIE ZDALNYM, gdzie plik zostanie skopiowany z kontenera
     remote_host_temp_report_path: "/tmp/gatling_junit_report_{{ build_id_from_pipeline }}.xml"
+    # Lokalny katalog na agencie Azure DevOps, gdzie będzie zapisany raport końcowy
+    # Użycie AGENT_TEMPDIRECTORY dla ADO, lub /tmp dla lokalnych testów
     local_report_path: "{{ lookup('env', 'AGENT_TEMPDIRECTORY') | default('/tmp') }}/junit_reports/{{ build_id_from_pipeline }}"
 
+    # Zmienne dla ładowania obrazu z .tar
+    base_docker_path: "/app/docker/images" # Ścieżka bazowa do folderów z obrazami
     image_name_prefix: "skopeoCopy-gatling-test-"
     current_image_full_folder_name_pattern: "{{ image_name_prefix }}{{ build_id_from_pipeline }}*"
     current_image_tar_file_name: "gatling-test-{{ build_id_from_pipeline }}.tar"
-    final_tar_path: ""
+    final_tar_path: "" # Zmienna do przechowywania ostatecznej ścieżki do pliku tar do załadowania
 
   tasks:
     - name: Debug docker_cmd
@@ -87,13 +100,15 @@
       args:
         warn: false
       register: run_container_detached_result
-      failed_when: run_container_detached_result.rc != 0
+      failed_when: run_container_detached_result.rc != 0 # To jest OK, nie jest to złożone wyrażenie
 
     - name: Debug container ID
       ansible.builtin.debug:
         msg: "Container ID: {{ run_container_detached_result.stdout }}"
       tags: [ 'debug' ]
-      when: run_container_detached_result is defined and run_container_detached_result.rc == 0
+      when:
+        - run_container_detached_result is defined
+        - run_container_detached_result.rc == 0
 
     - name: Wait for the container to complete its task
       ansible.builtin.shell: |
@@ -102,7 +117,9 @@
       when:
         - run_container_detached_result is defined
         - run_container_detached_result.rc == 0
-      failed_when: "wait_container_result.rc != 0 and wait_container_result.stdout | int != 0" # <-- Zmiana tutaj: całe wyrażenie w cudzysłowach
+      # Używamy block scalar dla failed_when, aby uniknąć problemów z linterem
+      failed_when: |
+        wait_container_result.rc != 0 and wait_container_result.stdout | int != 0
 
     - name: Display container's exit code
       ansible.builtin.debug:
@@ -119,7 +136,7 @@
       when:
         - wait_container_result is defined
         - wait_container_result.rc == 0
-      failed_when: cp_report_result.rc != 0
+      failed_when: cp_report_result.rc != 0 # To jest OK, nie jest to złożone wyrażenie
 
     - name: Debug copy report result
       ansible.builtin.debug:
@@ -196,8 +213,11 @@
     - name: Set final_tar_path if .tar file found in folder
       ansible.builtin.set_fact:
         final_tar_path: "{{ found_docker_folders.files[0].path }}/{{ current_image_tar_file_name }}"
-      # --- POPRAWKA W TYM BLOKU: Liniach 99-102 w Twoim pliku
-      when: "tar_file_status_in_folder is defined and tar_file_status_in_folder.stat.exists and final_tar_path == ''" # <-- Zmiana tutaj: całe wyrażenie w cudzysłowach
+      # Używamy block scalar dla when, aby uniknąć problemów z linterem
+      when: |
+        tar_file_status_in_folder is defined and
+        tar_file_status_in_folder.stat.exists and
+        final_tar_path == ""
 
     - name: Debug: Final tar path for load
       ansible.builtin.debug:
@@ -242,8 +262,9 @@
         state: absent
       loop: "{{ lookup('fileglob', base_docker_path + '/*') }}"
       register: cleanup_dir_result
-      # --- POPRAWKA W TYM BLOKU: Liniach 207-208 w Twoim pliku
-      changed_when: "cleanup_dir_result.results | selectattr('changed', 'equalto', true) | list | length > 0" # <-- Zmiana tutaj: całe wyrażenie w cudzysłowach
+      # Używamy block scalar dla changed_when, aby uniknąć problemów z linterem
+      changed_when: |
+        cleanup_dir_result.results | selectattr('changed', 'equalto', true) | list | length > 0
       failed_when: false
       tags: [ 'cleanup' ]
 
