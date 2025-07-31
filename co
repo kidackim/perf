@@ -1,17 +1,18 @@
- - name: Copy entire Target folder from container to remote host
-      ansible.builtin.shell: |
-        "{{ docker_cmd }}" cp "{{ run_container_detached_result.stdout }}":/app/target/ /app/target/all_target_contents/
-      args:
-        warn: false
-      register: cp_full_target_result
-      when: wait_container_result is defined and wait_container_result.rc == 0 # Upewnij się, że kontener zakończył pracę
-      failed_when: cp_full_target_result.rc != 0
+    - task: ArchiveFiles@2
+      displayName: 'Skompresuj Całą Zawartość Target'
+      inputs:
+        # Pamiętaj, fetch tworzy podfolder z nazwą hosta, np. /fetched_all_target_contents/your_remote_host_name/app/target/all_target_contents/
+        rootFolderOrFile: '$(System.DefaultWorkingDirectory)/fetched_all_target_contents/{{ inventory_hostname }}/app/target/all_target_contents/' # <--- DOKŁADNA ŚCIEŻKA po fetchu
+        includeRootFolder: true # Czy skompresować także sam folder 'all_target_contents' wewnątrz archiwum
+        archiveType: 'zip'
+        archiveFile: '$(Build.ArtifactStagingDirectory)/full_target_contents_$(Build.BuildId).zip' # Nazwa nowego archiwum
+        replaceExistingArchive: true
+      condition: succeeded() # Uruchom, jeśli Ansible Playbook powiódł się (w tym fetch)
 
-    - name: Fetch entire Target directory from remote host
-      ansible.builtin.fetch:
-        src: '/app/target/all_target_contents/' # <--- WAŻNE: Ścieżka do nowo skopiowanego folderu na HOŚCIE
-        dest: './fetched_all_target_contents/' # <--- Nowa, dedykowana lokalizacja na AGENCIE AZURE DEVOPS
-        flat: no # WAŻNE: 'no' zachowa pełną strukturę katalogów
-      register: fetch_all_target_result
-      ignore_errors: yes
-      when: cp_full_target_result is defined and cp_full_target_result.rc == 0 # Upewnij się, że kopiowanie z dockera na hosta się powiodło
+    - task: PublishBuildArtifacts@1
+      displayName: 'Opublikuj Archiwum Pełnego Target jako Artefakt'
+      inputs:
+        pathToPublish: '$(Build.ArtifactStagingDirectory)/full_target_contents_$(Build.BuildId).zip' # Ścieżka do skompresowanego pliku
+        artifactName: 'FullTargetContentsArchive' # <--- Nowa, unikalna nazwa artefaktu
+        publishLocation: 'Container'
+      condition: succeeded()
