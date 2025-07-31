@@ -1,15 +1,166 @@
-- name: Run Docker/Podman image in detached mode and get container ID
+---
+- name: Load Docker image, run tests, fetch report, then clean up
+  hosts: all
+  gather_facts: false
+  become: true
+  become_user: root
+  become_method: sudo
+
+  vars:
+    base_docker_path: "/app/docker/images"
+    build_id_from_pipeline: "{{ build_id_from_pipeline }}"
+    container_env_TOKEN_PASSWORD: "{{ TOKEN_PASSWORD }}"
+    container_env_GATLING_USERS: "{{ GATLING_USERS }}"
+    container_env_SIMULATION_NAME: "{{ SIMULATION_NAME }}"
+
+    docker_cmd: "podman"
+
+    # Zmodyfikowana ścieżka do raportu JUnit w kontenerze
+    container_junit_report_path: "/app/junit_report_from_log.xml"
+    remote_host_temp_report_path: "/tmp/gatling_junit_report_{{ build_id_from_pipeline }}.xml"
+    local_report_path: "{{ lookup('env', 'AGENT_TEMPDIRECTORY') | default('/tmp') }}/junit_reports/{{ build_id_from_pipeline }}"
+
+    image_name_prefix: "skopeoCopy-gatling-test-"
+    current_image_full_folder_name_pattern: "{{ image_name_prefix }}{{ build_id_from_pipeline }}*"
+    current_image_tar_file_name: "gatling-test-{{ build_id_from_pipeline }}.tar"
+    final_tar_path: ""
+    loaded_image_name: ""
+
+  tasks:
+    - name: Debug docker_cmd
+      ansible.builtin.debug:
+        msg: "Using command: {{ docker_cmd }}"
+      tags: [ 'debug' ]
+
+    - name: Verify current user and groups
+      ansible.builtin.shell: |
+        echo "Current user: $(whoami)"
+        echo "User ID info: $(id)"
+        echo "User groups: $(groups)"
+      register: user_info
+      changed_when: false
+      tags: [ 'debug' ]
+
+    - name: Display current user and groups info
+      ansible.builtin.debug:
+        msg: |
+          "Current user: {{ user_info.stdout_lines[0] | default('N/A') }}"
+          "User ID info: {{ user_info.stdout_lines[1] | default('N/A') }}"
+          "User groups: {{ user_info.stdout_lines[2] | default('N/A') }}"
+      tags: [ 'debug' ]
+
+    - name: Check if .tar file exists directly in {{ base_docker_path }}
+      ansible.builtin.stat:
+        path: "{{ base_docker_path }}/{{ current_image_tar_file_name }}"
+      register: tar_file_status_direct
+
+    - name: Set final_tar_path if .tar file found directly
+      ansible.builtin.set_fact:
+        final_tar_path: "{{ base_docker_path }}/{{ current_image_tar_file_name }}"
+      when: tar_file_status_direct.stat.exists
+
+    - name: Debug: Tar file found directly?
+      ansible.builtin.debug:
+        msg: "Tar file directly in base_docker_path: {{ tar_file_status_direct.stat.exists }}"
+      tags: [ 'debug' ]
+
+    - name: Find the Docker image folder if .tar not found directly
+      ansible.builtin.find:
+        paths: "{{ base_docker_path }}"
+        file_type: directory
+        patterns: "{{ current_image_full_folder_name_pattern }}"
+      register: found_docker_folders
+      when: not tar_file_status_direct.stat.exists
+
+    - name: Debug found_docker_folders result (if searched)
+      ansible.builtin.debug:
+        var: found_docker_folders
+        msg: "Found docker folders: {{ found_docker_folders.files | map(attribute='path') | list }}"
+      tags: [ 'debug' ]
+      when: found_docker_folders is defined
+
+    - name: Verify that the .tar file exists within the found folder (if folder found)
+      ansible.builtin.stat:
+        path: "{{ found_docker_folders.files[0].path }}/{{ current_image_tar_file_name }}"
+      register: tar_file_status_in_folder
+      when:
+        - found_docker_folders is defined
+        - found_docker_folders.files is defined
+        - found_docker_folders.files | length == 1
+        - not tar_file_status_direct.stat.exists
+
+    - name: Set final_tar_path if .tar file found in folder
+      ansible.builtin.set_fact:
+        final_tar_path: "{{ found_docker_folders.files[0].path }}/{{ current_image_tar_file_name }}"
+      when:
+        - tar_file_status_in_folder is defined
+        - tar_file_status_in_folder.stat.exists
+        - final_tar_path == ""
+
+    - name: Debug: Final tar path for load
+      ansible.builtin.debug:
+        msg: "Final tar path for load: {{ final_tar_path }}"
+      tags: [ 'debug' ]
+
+    - name: Fail if no .tar file was found at all for load
+      ansible.builtin.fail:
+        msg: "ERROR: No .tar file '{{ current_image_tar_file_name }}' found for build ID {{ build_id_from_pipeline }} either directly in {{ base_docker_path }} or within a matching folder for image loading."
+      when: final_tar_path == ""
+
+    - name: Load Docker image from tar file
+      ansible.builtin.shell: |
+        {{ docker_cmd }} load -i "{{ final_tar_path }}"
+      args:
+        chdir: "{{ final_tar_path | dirname }}"
+      register: load_result
+      tags: [ 'load_image' ]
+
+    - name: Display load result
+      ansible.builtin.debug:
+        msg: "Image load result: {{ load_result.stdout }}"
+      tags: [ 'debug', 'load_image' ]
+
+    - name: Get name of the newly loaded image
+      ansible.builtin.set_fact:
+        loaded_image_name: "{{ load_result.stdout_lines | select('match', '^Loaded image:') | first | regex_replace('^Loaded image: *(.*)$', '\\1') }}"
+      when: load_result is defined and load_result.rc == 0
+      tags: [ 'load_image', 'debug' ]
+
+    - name: Debug loaded_image_name
+      ansible.builtin.debug:
+        msg: "Newly loaded image name for run: {{ loaded_image_name }}"
+      tags: [ 'debug' ]
+      when: loaded_image_name is defined and loaded_image_name != ""
+
+    - name: Ensure /app/target directory exists and has correct permissions for container user
+      ansible.builtin.file:
+        path: /app/target
+        state: directory
+        mode: '0775'
+        owner: '1001'
+        group: '1001'
+      become: true
+      become_user: root
+      tags: [ 'permissions' ]
+
+    - name: Clean up old report files on remote host (if any from previous runs)
+      ansible.builtin.file:
+        path: "{{ remote_host_temp_report_path }}"
+        state: absent
+      tags: [ 'cleanup_reports_before_run' ]
+
+    - name: Run Docker/Podman image in detached mode and get container ID (using newly loaded image)
       ansible.builtin.shell: |
         "{{ docker_cmd }} run -d --rm \
         -v /app/target:/app/target \
         -e TOKEN_PASSWORD={{ container_env_TOKEN_PASSWORD | quote }} \
         -e GATLING_USERS={{ container_env_GATLING_USERS | quote }} \
         -e SIMULATION_NAME={{ container_env_SIMULATION_NAME | quote }} \
-        {{ image_to_run_name | quote }}"
+        {{ loaded_image_name | quote }}"
       args:
         warn: false
       register: run_container_detached_result
-      when: image_check.stdout | length > 0
+      when: loaded_image_name is defined and loaded_image_name != ""
       failed_when: run_container_detached_result.rc != 0
 
     - name: Debug container ID
@@ -31,7 +182,6 @@
       tags: [ 'debug' ]
       when: wait_container_result is defined
 
-    # --- NOWY KROK: Kopiowanie pliku XML z kontenera na hosta ---
     - name: Copy JUnit report from container to remote host
       ansible.builtin.shell: |
         "{{ docker_cmd }} cp {{ run_container_detached_result.stdout }}:{{ container_junit_report_path }} {{ remote_host_temp_report_path }}"
@@ -40,3 +190,62 @@
       register: cp_report_result
       when: wait_container_result is defined and wait_container_result.rc == 0
       failed_when: cp_report_result.rc != 0
+
+    - name: Debug copy report result
+      ansible.builtin.debug:
+        var: cp_report_result
+      tags: [ 'debug' ]
+      when: cp_report_result is defined
+
+    - name: Ensure local report directory exists on Ansible controller (Azure DevOps Agent)
+      ansible.builtin.file:
+        path: "{{ local_report_path }}"
+        state: directory
+        mode: '0755'
+      delegate_to: localhost
+      run_once: true
+      tags: [ 'junit_report' ]
+
+    - name: Fetch Junit report from remote host to local
+      ansible.builtin.fetch:
+        src: "{{ remote_host_temp_report_path }}"
+        dest: "{{ local_report_path }}"
+        flat: yes
+      when: cp_report_result is defined and cp_report_result.rc == 0
+      register: fetch_report_result
+      tags: [ 'junit_report' ]
+
+    - name: Display fetch report result
+      ansible.builtin.debug:
+        var: fetch_report_result
+      tags: [ 'debug', 'junit_report' ]
+      when: fetch_report_result is defined
+
+    - name: Final cleanup of all contents in {{ base_docker_path }} (files and directories)
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: absent
+      loop: "{{ lookup('fileglob', base_docker_path + '/*') }}"
+      register: final_cleanup_dir_result
+      changed_when: final_cleanup_dir_result.results | selectattr('changed', 'equalto', true) | list | length > 0
+      failed_when: false
+      tags: [ 'cleanup' ]
+
+    - name: Display final directory cleanup result
+      ansible.builtin.debug:
+        msg: "Final directory cleanup result: {{ final_cleanup_dir_result }}"
+      tags: [ 'debug' ]
+
+    - name: Final cleanup of existing Podman/Docker images (from runtime)
+      ansible.builtin.shell: |
+        {{ docker_cmd }} rmi $({{ docker_cmd }} images -q) || true
+      args:
+        warn: false
+      changed_when: false
+      register: final_cleanup_images_result
+      tags: [ 'cleanup' ]
+
+    - name: Display final images cleanup result
+      ansible.builtin.debug:
+        msg: "Final images cleanup result: {{ final_cleanup_images_result.stdout }}"
+      tags: [ 'debug' ]
