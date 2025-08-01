@@ -1,4 +1,15 @@
-mail_status:
-        {% if variables['Agent.JobStatus'] == 'Succeeded' %}Success{% elif variables['Agent.JobStatus'] == 'Failed' %}Failure{% else %}Warning{% endif %}
-      mail_status_color:
-        {% if variables['Agent.JobStatus'] == 'Succeeded' %}green{% elif variables['Agent.JobStatus'] == 'Failed' %}red{% else %}orange{% endif %}
+    - task: PowerShell@2
+      displayName: 'Set Mail Status and Color'
+      inputs:
+        targetType: 'inline'
+        script: |
+          if ("$(Agent.JobStatus)" -eq "Succeeded") {
+            Write-Host "##vso[task.setvariable variable=mailStatus]Success"
+            Write-Host "##vso[task.setvariable variable=mailStatusColor]green"
+          } elseif ("$(Agent.JobStatus)" -eq "Failed") {
+            Write-Host "##vso[task.setvariable variable=mailStatus]Failure"
+            Write-Host "##vso[task.setvariable variable=mailStatusColor]red"
+          } else {
+            Write-Host "##vso[task.setvariable variable=mailStatus]Warning"
+            Write-Host "##vso[task.setvariable variable=mailStatusColor]orange"
+          }
