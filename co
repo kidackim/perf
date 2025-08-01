@@ -1,8 +1,7 @@
-- name: Fetch target.zip from remote host
-  ansible.builtin.fetch:
-    src: '/app/target.zip'
-    dest: './fetched_target_archive/'
-    flat: yes
-  register: fetch_all_target_result
-  ignore_errors: yes
-  when: cp_full_target_result is defined
+- task: PublishBuildArtifacts@1
+  displayName: 'Publish Target.zip as Artifact'
+  inputs:
+    pathToPublish: '$(System.DefaultWorkingDirectory)/playbooks/fetched_archive/target.zip'
+    artifactName: 'GatlingTargetArchive'
+    publishLocation: 'Container'
+  condition: succeeded()
