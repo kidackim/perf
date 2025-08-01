@@ -10,11 +10,16 @@
       STATUS_COLOR="orange"
     fi
 
+    # Tworzymy listę adresatów
     MAIL_TO=$(parameters.recipient1),$(parameters.recipient2),$(parameters.recipient3)
 
     cd playbooks
     ansible-playbook "scripts/send-test-results-mail.yml" \
-    --extra-vars '{"mail_to": "'"$MAIL_TO"'", "status": "'"$STATUS"'", "status_color": "'"$STATUS_COLOR"'", "build": "$(Build.BuildNumber)", "project_url": "https://dev.azure.com/IngEurCdaaS01/IngOne/_build/results?buildId=$(Build.BuildId)", "attachments": ["$(System.DefaultWorkingDirectory)/playbooks/fetched_reports/junit_report_from_log.xml", "$(System.DefaultWorkingDirectory)/playbooks/fetched_target_archive/archive.zip"]}'
+    --extra-vars "mail_to=$MAIL_TO" \
+    --extra-vars "status=$STATUS" \
+    --extra-vars "status_color=$STATUS_COLOR" \
+    --extra-vars "build=$(Build.BuildNumber)" \
+    --extra-vars "project_url=https://dev.azure.com/IngEurCdaaS01/IngOne/_build/results?buildId=$(Build.BuildId)"
   displayName: 'Send Test Results by Mail'
   condition: always()
   env:
