@@ -2,72 +2,60 @@ import fs from 'fs';
 import path from 'path';
 import archiver from 'archiver';
 
-// Definicja katalogu i nazwy pliku
 const sourceDir = 'target';
-// Używamy process.cwd() zamiast __dirname, aby uzyskać bieżący katalog roboczy
 const outputDir = process.cwd(); 
 const outputFileName = `archive.zip`;
 const outputFilePath = path.join(outputDir, outputFileName);
 
-// Funkcja asynchroniczna do kompresji
 async function createZipArchive(source, output) {
-    // Sprawdzenie, czy katalog źródłowy istnieje
     const sourcePath = path.join(outputDir, source);
     if (!fs.existsSync(sourcePath)) {
-        console.error(`❌ Błąd: Katalog źródłowy "${sourcePath}" nie istnieje. Archiwizacja nieudana.`);
+        console.error(`❌ Error: Source directory "${sourcePath}" does not exist. Archiving failed.`);
         return false;
     }
 
-    console.log(`⏳ Rozpoczynanie archiwizacji katalogu "${source}"...`);
+    console.log(`⏳ Starting to archive directory "${source}"...`);
     
-    // Sprawdzenie i usunięcie istniejącego pliku archiwum
     if (fs.existsSync(output)) {
         try {
             fs.unlinkSync(output);
-            console.log(`⚠️ Usunięto istniejący plik "${output}".`);
+            console.log(`⚠️ Removed existing file "${output}".`);
         } catch (error) {
-            console.error(`❌ Błąd podczas usuwania istniejącego pliku: ${error.message}`);
+            console.error(`❌ Error deleting existing file: ${error.message}`);
             return false;
         }
     }
 
-    // Utworzenie strumienia zapisu
     const outputStream = fs.createWriteStream(output);
     const archive = archiver('zip', {
-        zlib: { level: 9 } // Maksymalny poziom kompresji
+        zlib: { level: 9 }
     });
 
-    // Użycie Promise do asynchronicznego oczekiwania na zakończenie archiwizacji
     const promise = new Promise((resolve, reject) => {
-        // Obsługa zdarzenia 'close' na strumieniu wyjściowym
         outputStream.on('close', () => {
-            console.log(`✅ Archiwum ZIP zostało utworzone: ${archive.pointer()} bajtów.`);
-            console.log(`   Plik: ${output}`);
+            console.log(`✅ ZIP archive created: ${archive.pointer()} bytes.`);
+            console.log(`   File: ${output}`);
             resolve();
         });
 
-        // Obsługa zdarzeń z archiwizatora
         archive.on('warning', (err) => {
             if (err.code === 'ENOENT') {
-                console.warn(`⚠️ Ostrzeżenie archiwizatora: ${err.message}`);
+                console.warn(`⚠️ Archiver warning: ${err.message}`);
             } else {
-                reject(new Error(`Błąd archiwizatora: ${err.message}`));
+                reject(new Error(`Archiver error: ${err.message}`));
             }
         });
 
         archive.on('error', (err) => {
-            reject(new Error(`Krytyczny błąd archiwizatora: ${err.message}`));
+            reject(new Error(`Critical archiver error: ${err.message}`));
         });
 
-        // Obsługa błędu strumienia wyjściowego
         outputStream.on('error', (err) => {
-            reject(new Error(`Błąd strumienia wyjściowego: ${err.message}`));
+            reject(new Error(`Output stream error: ${err.message}`));
         });
 
-        // Podłączenie strumienia
         archive.pipe(outputStream);
         
-        // Dodawanie całego katalogu 'target' do archiwum
         archive.directory(sourcePath, source);
         
         archive.finalize();
@@ -77,20 +65,18 @@ async function createZipArchive(source, output) {
         await promise;
         return true;
     } catch (error) {
-        console.error(`❌ Błąd podczas tworzenia archiwum: ${error.message}`);
-        // Usuwanie częściowo utworzonego pliku, jeśli wystąpił błąd
+        console.error(`❌ An error occurred while creating the archive: ${error.message}`);
         if (fs.existsSync(output)) {
             fs.unlinkSync(output);
-            console.log(`   Usunięto częściowo utworzony plik: ${output}`);
+            console.log(`   Deleted partially created file: ${output}`);
         }
         return false;
     }
 }
 
-// Wywołanie głównej funkcji
 (async () => {
     const success = await createZipArchive(sourceDir, outputFilePath);
     if (!success) {
-        process.exit(1); // Zakończ proces z błędem, jeśli archiwizacja nie powiodła się
+        process.exit(1);
     }
 })();
