@@ -1,80 +1,11 @@
----
-# playbooks/scripts/send-test-results-mail.yml
-- name: Send email about test results
-  hosts: localhost
-  connection: local
-  tasks:
-    - name: Send email
-      community.general.mail:
-        host: "{{ smtp_host }}"
-        port: "{{ smtp_port }}"
-        from: "{{ mail_from }}"
-        to: "{{ mail_to }}"
-        subject: "{{ mail_subject }}"
-        body: |
-          <html>
-            <body>
-              <h3><div style="color:{{ status_color }}">{{ status }} of Gatling HCE API tests performed in build {{ build }}</div></h3>
-              <h4>Tests execution logs: {{ project_url }}</h4>
-            </body>
-          </html>
-        subtype: html
-        attachments: "{{ attachments }}"
+  mail_status: >
+            {% if variables['Agent.JobStatus'] == 'Succeeded' %}Success
+            {% elif variables['Agent.JobStatus'] == 'Failed' %}Failure
+            {% else %}Warning
+            {% endif %}
 
-
-
-parameters:
-- name: recipient1
-  displayName: 'Recipient 1'
-  type: string
-  default: 'aleksander.lorenz@ing.pl'
-
-- name: recipient2
-  displayName: 'Recipient 2'
-  type: string
-  default: 'patrycja.janiszewska@ing.pl'
-
-- name: recipient3
-  displayName: 'Recipient 3'
-  type: string
-  default: 'kacper.glowinski1@ing.pl'
-
-- name: smtpHost
-  displayName: 'SMTP Host'
-  type: string
-  default: 'smtp.office365.com'
-
-- name: smtpPort
-  displayName: 'SMTP Port'
-  type: string
-  default: '587'
-
-- name: mailFrom
-  displayName: 'Sender Email'
-  type: string
-  default: 'gatgate.pl.ing-ad'
-
-
- - task: Ansible@1
-      displayName: 'Send Dynamic Test Results Email with Ansible'
-      inputs:
-        playbookFile: 'playbooks/scripts/send-test-results-mail.yml' # Zmieniona nazwa pliku
-        inventoryHosts: 'localhost,' # Wymagane
-        vars:
-          # Przekazywanie zmiennych do playbooka
-          smtp_host: '${{ parameters.smtpHost }}'
-          smtp_port: '${{ parameters.smtpPort }}'
-          mail_from: '${{ parameters.mailFrom }}'
-          mail_to: '${{ parameters.recipient1 }},${{ parameters.recipient2 }},${{ parameters.recipient3 }}'
-          
-          # Dynamiczne zmienne dla statusu i treści
-          status: '{{ "Success" if eq(variables["Agent.JobStatus"], "Succeeded") else ("Failure" if eq(variables["Agent.JobStatus"], "Failed") else "Canceled") }}'
-          status_color: '{{ "green" if eq(variables["Agent.JobStatus"], "Succeeded") else ("red" if eq(variables["Agent.JobStatus"], "Failed") else "orange") }}'
-          build: '$(Build.BuildNumber)'
-          project_url: '$(System.TeamFoundationCollectionUri)$(System.TeamProject)/_build/results?buildId=$(Build.BuildId)'
-          
-          # Lista załączników
-          attachments:
-            - '$(System.DefaultWorkingDirectory)/playbooks/fetched_reports/junit_report_from_log.xml'
-            - '$(System.DefaultWorkingDirectory)/playbooks/fetched_archive/target.zip'
-      condition: always()
+          mail_status_color: >
+            {% if variables['Agent.JobStatus'] == 'Succeeded' %}green
+            {% elif variables['Agent.JobStatus'] == 'Failed' %}red
+            {% else %}orange
+            {% endif %}
