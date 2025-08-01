@@ -1,19 +1,19 @@
-  - script: |
-      cd playbooks
-      ansible-playbook "scripts/send-test-results-mail.yml" \
-      --extra-vars '{"smtp_host": "$(parameters.smtpHost)", "smtp_port": "$(parameters.smtpPort)", "mail_from": "$(parameters.mailFrom)", "mail_to": "$(parameters.recipient1),$(parameters.recipient2),$(parameters.recipient3)", "status": "Success", "status_color": "green", "build": "$(Build.BuildNumber)", "project_url": "https://dev.azure.com/IngEurCdaaS01/IngOne/_build/results?buildId=$(Build.BuildId)", "attachments": ["$(System.DefaultWorkingDirectory)/playbooks/fetched_reports/junit_report_from_log.xml", "$(System.DefaultWorkingDirectory)/playbooks/fetched_target_archive/archive.zip"]}' \
-      -i "inventories/$(parameters.environment)"
-    displayName: 'Send Test Results by Mail - Success'
-    condition: and(succeeded(), eq(parameters.sendTestResultsEmail, 'true'))
-    env:
-      SYSTEM_ACCESSTOKEN: $(System.AccessToken)
+- script: |
+    if [ "$(Agent.JobStatus)" == "Succeeded" ]; then
+      STATUS="Success"
+      STATUS_COLOR="green"
+    elif [ "$(Agent.JobStatus)" == "Failed" ]; then
+      STATUS="Failure"
+      STATUS_COLOR="red"
+    else
+      STATUS="Warning"
+      STATUS_COLOR="orange"
+    fi
 
-  - script: |
-      cd playbooks
-      ansible-playbook "scripts/send-test-results-mail.yml" \
-      --extra-vars '{"smtp_host": "$(parameters.smtpHost)", "smtp_port": "$(parameters.smtpPort)", "mail_from": "$(parameters.mailFrom)", "mail_to": "$(parameters.recipient1),$(parameters.recipient2),$(parameters.recipient3)", "status": "Failure", "status_color": "red", "build": "$(Build.BuildNumber)", "project_url": "https://dev.azure.com/IngEurCdaaS01/IngOne/_build/results?buildId=$(Build.BuildId)", "attachments": ["$(System.DefaultWorkingDirectory)/playbooks/fetched_reports/junit_report_from_log.xml", "$(System.DefaultWorkingDirectory)/playbooks/fetched_target_archive/archive.zip"]}' \
-      -i "inventories/$(parameters.environment)"
-    displayName: 'Send Test Results by Mail - Failure'
-    condition: and(failed(), eq(parameters.sendTestResultsEmail, 'true'))
-    env:
-      SYSTEM_ACCESSTOKEN: $(System.AccessToken)
+    cd playbooks
+    ansible-playbook "scripts/send-test-results-mail.yml" \
+    --extra-vars '{"smtp_host": "$(parameters.smtpHost)", "smtp_port": "$(parameters.smtpPort)", "mail_from": "$(parameters.mailFrom)", "mail_to": "$(parameters.recipient1),$(parameters.recipient2),$(parameters.recipient3)", "status": "'"$STATUS"'", "status_color": "'"$STATUS_COLOR"'", "build": "$(Build.BuildNumber)", "project_url": "https://dev.azure.com/IngEurCdaaS01/IngOne/_build/results?buildId=$(Build.BuildId)", "attachments": ["$(System.DefaultWorkingDirectory)/playbooks/fetched_reports/junit_report_from_log.xml", "$(System.DefaultWorkingDirectory)/playbooks/fetched_target_archive/archive.zip"]}'
+  displayName: 'Send Test Results by Mail'
+  condition: always()
+  env:
+    SYSTEM_ACCESSTOKEN: $(System.AccessToken)
