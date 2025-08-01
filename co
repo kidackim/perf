@@ -1,4 +1,5 @@
 - script: |
+    # 1. Zdefiniuj status i kolor na podstawie wyniku joba
     if [ "$(Agent.JobStatus)" == "Succeeded" ]; then
       STATUS="Success"
       STATUS_COLOR="green"
@@ -10,16 +11,29 @@
       STATUS_COLOR="orange"
     fi
 
-    # Tworzymy listę adresatów
-    MAIL_TO=$(parameters.recipient1),$(parameters.recipient2),$(parameters.recipient3)
+    # 2. Utwórz tymczasowy plik z dodatkowymi zmiennymi
+    EXTRA_VARS_FILE="ansible-vars.yml"
+    
+    echo "---" > $EXTRA_VARS_FILE
+    echo "mail_to: '$(parameters.recipient1),$(parameters.recipient2),$(parameters.recipient3)'" >> $EXTRA_VARS_FILE
+    echo "status: '$STATUS'" >> $EXTRA_VARS_FILE
+    echo "status_color: '$STATUS_COLOR'" >> $EXTRA_VARS_FILE
+    echo "build: '$(Build.BuildNumber)'" >> $EXTRA_VARS_FILE
+    echo "project_url: 'https://dev.azure.com/IngEurCdaaS01/IngOne/_build/results?buildId=$(Build.BuildId)'" >> $EXTRA_VARS_FILE
+    
+    # Przekaż załączniki jako listę w YAML (Zgodnie z dokumentacją)
+    echo "attachments:" >> $EXTRA_VARS_FILE
+    echo "  - '$(System.DefaultWorkingDirectory)/playbooks/fetched_reports/junit_report_from_log.xml'" >> $EXTRA_VARS_FILE
+    echo "  - '$(System.DefaultWorkingDirectory)/playbooks/fetched_target_archive/archive.zip'" >> $EXTRA_VARS_FILE
 
+    # 3. Uruchom Ansible, przekazując plik
     cd playbooks
     ansible-playbook "scripts/send-test-results-mail.yml" \
-    --extra-vars "mail_to=$MAIL_TO" \
-    --extra-vars "status=$STATUS" \
-    --extra-vars "status_color=$STATUS_COLOR" \
-    --extra-vars "build=$(Build.BuildNumber)" \
-    --extra-vars "project_url=https://dev.azure.com/IngEurCdaaS01/IngOne/_build/results?buildId=$(Build.BuildId)"
+    --extra-vars "@../$EXTRA_VARS_FILE"
+    
+    # 4. Opcjonalne: usuń tymczasowy plik
+    rm "../$EXTRA_VARS_FILE"
+
   displayName: 'Send Test Results by Mail'
   condition: always()
   env:
