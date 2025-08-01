@@ -1,18 +1,96 @@
-- task: ArchiveFiles@2
-      displayName: 'Compress All Target Contents' # Translated display name
-      inputs:
-        # Remember, 'fetch' creates a subfolder with the hostname, e.g., /fetched_all_target_contents/your_remote_host_name/app/target/all_target_contents/
-        rootFolderOrFile: '$(System.DefaultWorkingDirectory)/fetched_all_target_contents/{{ inventory_hostname }}/app/target/all_target_contents/' # <--- PRECISE PATH after fetch
-        includeRootFolder: true # Whether to also compress the 'all_target_contents' folder itself inside the archive
-        archiveType: 'zip'
-        archiveFile: '$(Build.ArtifactStagingDirectory)/full_target_contents_$(Build.BuildId).zip' # New archive name
-        replaceExistingArchive: true
-      condition: succeeded() # Run if Ansible Playbook succeeded (including fetch)
+import fs from 'fs';
+import path from 'path';
+import archiver from 'archiver';
 
-    - task: PublishBuildArtifacts@1
-      displayName: 'Publish Full Target Archive as Artifact' # Translated display name
-      inputs:
-        pathToPublish: '$(Build.ArtifactStagingDirectory)/full_target_contents_$(Build.BuildId).zip' # Path to the compressed file
-        artifactName: 'FullTargetContentsArchive' # <--- New, unique artifact name
-        publishLocation: 'Container'
-      condition: succeeded()
+// Definicja katalogu i nazwy pliku
+const sourceDir = 'target';
+// Używamy process.cwd() zamiast __dirname, aby uzyskać bieżący katalog roboczy
+const outputDir = process.cwd(); 
+const outputFileName = `archive.zip`;
+const outputFilePath = path.join(outputDir, outputFileName);
+
+// Funkcja asynchroniczna do kompresji
+async function createZipArchive(source, output) {
+    // Sprawdzenie, czy katalog źródłowy istnieje
+    const sourcePath = path.join(outputDir, source);
+    if (!fs.existsSync(sourcePath)) {
+        console.error(`❌ Błąd: Katalog źródłowy "${sourcePath}" nie istnieje. Archiwizacja nieudana.`);
+        return false;
+    }
+
+    console.log(`⏳ Rozpoczynanie archiwizacji katalogu "${source}"...`);
+    
+    // Sprawdzenie i usunięcie istniejącego pliku archiwum
+    if (fs.existsSync(output)) {
+        try {
+            fs.unlinkSync(output);
+            console.log(`⚠️ Usunięto istniejący plik "${output}".`);
+        } catch (error) {
+            console.error(`❌ Błąd podczas usuwania istniejącego pliku: ${error.message}`);
+            return false;
+        }
+    }
+
+    // Utworzenie strumienia zapisu
+    const outputStream = fs.createWriteStream(output);
+    const archive = archiver('zip', {
+        zlib: { level: 9 } // Maksymalny poziom kompresji
+    });
+
+    // Użycie Promise do asynchronicznego oczekiwania na zakończenie archiwizacji
+    const promise = new Promise((resolve, reject) => {
+        // Obsługa zdarzenia 'close' na strumieniu wyjściowym
+        outputStream.on('close', () => {
+            console.log(`✅ Archiwum ZIP zostało utworzone: ${archive.pointer()} bajtów.`);
+            console.log(`   Plik: ${output}`);
+            resolve();
+        });
+
+        // Obsługa zdarzeń z archiwizatora
+        archive.on('warning', (err) => {
+            if (err.code === 'ENOENT') {
+                console.warn(`⚠️ Ostrzeżenie archiwizatora: ${err.message}`);
+            } else {
+                reject(new Error(`Błąd archiwizatora: ${err.message}`));
+            }
+        });
+
+        archive.on('error', (err) => {
+            reject(new Error(`Krytyczny błąd archiwizatora: ${err.message}`));
+        });
+
+        // Obsługa błędu strumienia wyjściowego
+        outputStream.on('error', (err) => {
+            reject(new Error(`Błąd strumienia wyjściowego: ${err.message}`));
+        });
+
+        // Podłączenie strumienia
+        archive.pipe(outputStream);
+        
+        // Dodawanie całego katalogu 'target' do archiwum
+        archive.directory(sourcePath, source);
+        
+        archive.finalize();
+    });
+
+    try {
+        await promise;
+        return true;
+    } catch (error) {
+        console.error(`❌ Błąd podczas tworzenia archiwum: ${error.message}`);
+        // Usuwanie częściowo utworzonego pliku, jeśli wystąpił błąd
+        if (fs.existsSync(output)) {
+            fs.unlinkSync(output);
+            console.log(`   Usunięto częściowo utworzony plik: ${output}`);
+        }
+        return false;
+    }
+}
+
+// Wywołanie głównej funkcji
+(async () => {
+    const success = await createZipArchive(sourceDir, outputFilePath);
+    if (!success) {
+        process.exit(1); // Zakończ proces z błędem, jeśli archiwizacja nie powiodła się
+    }
+})();
