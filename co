@@ -1,11 +1,25 @@
-  mail_status: >
-            {% if variables['Agent.JobStatus'] == 'Succeeded' %}Success
-            {% elif variables['Agent.JobStatus'] == 'Failed' %}Failure
-            {% else %}Warning
+vars:
+          smtp_host: '${{ parameters.smtpHost }}'
+          smtp_port: '${{ parameters.smtpPort }}'
+          mail_from: '${{ parameters.mailFrom }}'
+          mail_to: '${{ parameters.recipient1 }},${{ parameters.recipient2 }},${{ parameters.recipient3 }}'
+          
+          # Poprawnie sformatowana zmienna
+          mail_status: >
+            {% if variables['Agent.JobStatus'] == 'Succeeded' %}
+            Success
+            {% elif variables['Agent.JobStatus'] == 'Failed' %}
+            Failure
+            {% else %}
+            Warning
             {% endif %}
 
+          # Poprawnie sformatowana zmienna
           mail_status_color: >
-            {% if variables['Agent.JobStatus'] == 'Succeeded' %}green
-            {% elif variables['Agent.JobStatus'] == 'Failed' %}red
-            {% else %}orange
+            {% if variables['Agent.JobStatus'] == 'Succeeded' %}
+            green
+            {% elif variables['Agent.JobStatus'] == 'Failed' %}
+            red
+            {% else %}
+            orange
             {% endif %}
