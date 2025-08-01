@@ -1,2 +1,18 @@
- mail_status: '$(mailStatus)'
-          mail_status_color: '$(mailStatusColor)'
+- task: Ansible@1
+      displayName: 'Send Dynamic Test Results Email with Ansible'
+      env:
+        SMTP_HOST: '$(parameters.smtpHost)'
+        SMTP_PORT: '$(parameters.smtpPort)'
+        MAIL_FROM: '$(parameters.mailFrom)'
+        MAIL_TO: '$(parameters.recipient1),$(parameters.recipient2),$(parameters.recipient3)'
+        MAIL_STATUS: '$(mailStatus)'
+        MAIL_STATUS_COLOR: '$(mailStatusColor)'
+        BUILD: '$(Build.BuildNumber)'
+        PROJECT_URL: 'https://dev.azure.com/IngEurCdaaS01/IngOne/_build/results?buildId=$(Build.BuildId)'
+      inputs:
+        playbookFile: 'playbooks/scripts/send-test-results-mail.yml'
+        inventoryHosts: 'localhost,'
+        attachments:
+        - '$(System.DefaultWorkingDirectory)/playbooks/fetched_reports/junit_report_from_log.xml'
+        - '$(System.DefaultWorkingDirectory)/playbooks/fetched_target_archive/archive.zip'
+      condition: always()
