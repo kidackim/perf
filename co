@@ -1,5 +1,8 @@
-- name: Copy target.zip from container to remote host
-  ansible.builtin.shell: |
-    "{{ docker_cmd }}" cp "{{ run_container_detached_result.stdout }}:/app/target.zip" /app/target.zip"
-  register: cp_full_target_result
-  when: cp_full_target_result is defined and wait_container_result.rc != 0
+- name: Fetch target.zip from remote host
+  ansible.builtin.fetch:
+    src: '/app/target.zip'
+    dest: './fetched_target_archive/'
+    flat: yes
+  register: fetch_all_target_result
+  ignore_errors: yes
+  when: cp_full_target_result is defined
