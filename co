@@ -1,19 +1,27 @@
-- script: |
-    if [ "$(Agent.JobStatus)" == "Succeeded" ]; then
-      STATUS="Success"
-      STATUS_COLOR="green"
-    elif [ "$(Agent.JobStatus)" == "Failed" ]; then
-      STATUS="Failure"
-      STATUS_COLOR="red"
-    else
-      STATUS="Warning"
-      STATUS_COLOR="orange"
-    fi
-
-    cd playbooks
-    ansible-playbook "scripts/send-test-results-mail.yml" \
-    --extra-vars '{"smtp_host": "$(parameters.smtpHost)", "smtp_port": "$(parameters.smtpPort)", "mail_from": "$(parameters.mailFrom)", "mail_to": "$(parameters.recipient1),$(parameters.recipient2),$(parameters.recipient3)", "status": "'"$STATUS"'", "status_color": "'"$STATUS_COLOR"'", "build": "$(Build.BuildNumber)", "project_url": "https://dev.azure.com/IngEurCdaaS01/IngOne/_build/results?buildId=$(Build.BuildId)", "attachments": ["$(System.DefaultWorkingDirectory)/playbooks/fetched_reports/junit_report_from_log.xml", "$(System.DefaultWorkingDirectory)/playbooks/fetched_target_archive/archive.zip"]}'
-  displayName: 'Send Test Results by Mail'
-  condition: always()
-  env:
-    SYSTEM_ACCESSTOKEN: $(System.AccessToken)
+---
+- name: Send email about test results
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  
+  vars:
+    smtp_host: 'mail.yourcompany.com'    # Zmień na swój domyślny host SMTP
+    smtp_port: 587                      # Zmień na swój domyślny port SMTP
+    mail_from: 'noreply@yourcompany.com' # Zmień na swój domyślny adres nadawcy
+    
+  tasks:
+    - name: Send email
+      community.general.mail:
+        host: "{{ smtp_host }}"
+        port: "{{ smtp_port }}"
+        from: "{{ mail_from }}"
+        to: "{{ mail_to }}"
+        subject: "CI/CD Build Results" # Możesz tu też zdefiniować stały temat maila
+        body:
+          html: |
+            <html>
+              <h3><div style="color: {{ status_color }}">{{ status }}</div></h3>
+              <h4>Tests execution logs: {{ project_url }}</h4>
+            </html>
+        subtype: html
+        attachments: "{{ attachments }}"
