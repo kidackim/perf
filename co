@@ -1,150 +1,33 @@
-### Analiza procesu CI/CD dla testów wydajnościowych Gatling: Kompendium wiedzy
+### Lista kroków procesu CI/CD dla testów Gatling
 
-Ten dokument stanowi szczegółową analizę potoku Continuous Integration/Continuous Delivery (CI/CD) stworzonego na potrzeby automatyzacji testów wydajnościowych Gatling. Proces ten, zdefiniowany w plikach `Dockerfile`, `azure-pipeline.yml` oraz playbookach Ansible (`docker_load.yml`, `send-test-results-mail.yml`), pozwala na kompleksowe zarządzanie testami od momentu budowania obrazu, poprzez jego bezpieczne uruchomienie, aż do finalnego raportowania wyników. Głównym celem jest zapewnienie **powtarzalności, niezawodności i efektywności** cyklu testowania.
+Oto finalna, szczegółowa lista kroków procesu CI/CD w formacie Markdown, gotowa do użycia.
 
-**Kluczowe pojęcia:**
+---
+### 1. Etap: Przygotowanie środowiska i obrazu
 
-  * **CI/CD:** Metodologia automatyzacji, która integruje zmiany w kodzie i dostarcza je do środowiska docelowego w sposób ciągły i zautomatyzowany.
-  * **Dockerfile:** Plik tekstowy, zawierający instrukcje do zbudowania **obrazu Docker** – izolowanego, przenośnego środowiska, które zawiera wszystkie zależności (kod, biblioteki, środowisko uruchomieniowe) niezbędne do uruchomienia aplikacji.
-  * **Azure Pipelines:** Usługa chmurowa Azure DevOps, która służy jako **dyrygent** całego potoku. Odpowiada za planowanie, uruchamianie zadań na agentach (wirtualnych maszynach) i monitorowanie ich statusu.
-  * **Ansible:** Narzędzie do automatyzacji IT, wykorzystywane w tym procesie do **zdalnego zarządzania serwerami**, na których fizycznie uruchamiane są testy.
+* **Start pipeline**: Proces jest wyzwalany automatycznie po **commicie** do repozytorium lub ręcznie w **Azure Pipelines**.
+* **Budowa obrazu Docker**: Na agencie CI, na podstawie **`Dockerfile`**, tworzony jest obraz środowiska testowego.
+* **Wypchnięcie obrazu do rejestru kontenerów** (Azure Container Registry lub Harbor): Obraz jest umieszczany w centralnym repozytorium.
+* **Skanowanie bezpieczeństwa obrazu w rejestrze**: Automatyczna kontrola pod kątem **luk w obrazie**.
+* **Eksport obrazu do pliku `.tar`**: Obraz jest zapisywany do archiwum `.tar` w agencie CI.
+* **Transfer pliku `.tar` z obrazem na zdalny serwer testowy**: Przesłanie archiwum z obrazem na serwer (np. przez **SSH**).
 
------
+---
+### 2. Etap: Wdrożenie i uruchomienie testów
 
-### Diagramy ilustrujące proces
+* **Pobranie sekretów z Azure Key Vault**: Bezpieczne pobranie danych potrzebnych do wykonania testów (np. hasła, klucze).
+* **Na serwerze: wyszukiwanie katalogu z obrazem**: **Ansible** skanuje wskazany folder, aby znaleźć podkatalog pasujący do numeru builda lub unikalnego znaku.
+* **Załaduj obraz Docker/Podman używając `podman load`**: Wczytanie obrazu z pliku `.tar` do lokalnego rejestru na serwerze.
+* **Uruchom kontener w trybie detached**: Start testów Gatling wewnątrz kontenera z odpowiednimi zmiennymi środowiskowymi (np. `GATLING_USERS`).
+* **Czekaj na zakończenie działania kontenera**: Operacje blokują się, aż testy zakończą się sukcesem lub błędem.
+* **Skopiuj raport testów JUnit oraz inne wyniki z kontenera na zdalny serwer**: Przeniesienie plików wyników z wewnątrz kontenera na serwer.
+* **Przenieś raport JUnit z serwera na agenta Azure Pipelines**: Raporty trafiają do systemu CI/CD w celu dalszego przetwarzania.
+* **Globalne czyszczenie zasobów na serwerze**: Zatrzymanie i usunięcie nieużywanych kontenerów oraz obrazów.
 
-Poniższe diagramy mają na celu wizualne przedstawienie struktury potoku i wzajemnych zależności między jego komponentami.
+---
+### 3. Etap: Raportowanie i czyszczenie
 
-#### Diagram 1: Ogólny przepływ potoku CI/CD
-
-```mermaid
-graph TD
-    subgraph "Azure Pipelines"
-        A[Rozpoczęcie potoku] --> B(Budowanie obrazu Docker)
-        B --> C[Wypchnięcie do rejestru kontenerow]
-    end
-    subgraph "Zdalny Serwer"
-        C --> D[Wdrozenie testow na serwerze]
-        D --> E[Uruchomienie testow Gatling w kontenerze]
-        E --> F[Pobranie wynikow i raportow]
-    end
-    subgraph "Azure Pipelines"
-        F --> G[Wyslanie e-maila z raportem]
-    end
-```
-
-**Opis diagramu:**
-
-1.  **Rozpoczęcie potoku:** Zmiana w kodzie (commit) lub manualne uruchomienie potoku w Azure Pipelines.
-2.  **Budowanie obrazu Docker:** Na agencie Azure DevOps uruchamiany jest proces budowania obrazu (`Dockerfile`).
-3.  **Wypchnięcie obrazu:** Zbudowany obraz trafia do rejestru kontenerów (ACR).
-4.  **Wdrożenie testów:** W ramach tego samego potoku, playbook Ansible (`docker_load.yml`) wgrywa obraz na zdalny serwer i uruchamia go jako kontener.
-5.  **Testowanie:** Kontener wykonuje testy Gatling, a ich wyniki są zapisywane wewnątrz kontenera.
-6.  **Pobieranie i analiza wyników:** Wyniki są pobierane z kontenera na serwer, a następnie na agenta Azure.
-7.  **Raportowanie:** Playbook Ansible (`send-test-results-mail.yml`) wysyła e-mail z podsumowaniem wyników.
-
-#### Diagram 2: Szczegółowy przepływ w ramach zadania `ContainerScanningAndSync`
-
-```mermaid
-graph TD
-    subgraph "Job: ContainerScanningAndSync"
-        A[Start<br>zaleznosc od BuildDockerImage] --> B(Task: BSKContainerScanning@3)
-        B --> C(Task: AzureKeyVault@1)
-        C --> D(Task: Uruchomienie Ansible<br>ansible-playbook docker_load.yml)
-        D --> E(Task: PublishTestResults@2)
-        E --> F(Script: Ustawienie statusu)
-        F --> G(Task: Wyslanie e-maila<br>ansible-playbook send-test-results-mail.yml)
-    end
-```
-
-**Opis diagramu:**
-
-1.  **Start:** Zadanie rozpoczyna się po pomyślnym zbudowaniu obrazu.
-2.  **Skanowanie:** Obraz jest skanowany pod kątem luk bezpieczeństwa (`BSKContainerScanning@3`).
-3.  **Pobieranie sekretów:** Kluczowe dane (np. hasła do aplikacji) są pobierane z Azure Key Vault (`AzureKeyVault@1`).
-4.  **Wdrożenie i testowanie:** Ansible uruchamia playbook `docker_load.yml`, który zarządza testami na zdalnym serwerze.
-5.  **Publikacja raportu JUnit:** Zostaje opublikowany czytelny raport testów w Azure DevOps (`PublishTestResults@2`).
-6.  **Ustawienie statusu:** Skrypt bash ustala status (`Success` / `Failure`) i kolor dla wiadomości e-mail.
-7.  **Wysłanie e-maila:** Ansible wywołuje playbook `send-test-results-mail.yml` w celu wysłania powiadomienia.
-
------
-
-### Szczegółowy opis komponentów
-
-#### 3.1. `Dockerfile` - Receptura środowiska testowego 👨‍🍳
-
-Twój `Dockerfile` jest przykładem **najlepszych praktyk** w tworzeniu obrazów Docker. Stosuje on technikę **wieloetapowego budowania (multi-stage build)**, która minimalizuje rozmiar końcowego obrazu i zwiększa jego bezpieczeństwo.
-
-**Etap 1: `builder`**
-
-  * **`FROM registry.access.redhat.com/ubi8-minimal-as-builder`**: Wykorzystuje bezpieczny i minimalistyczny obraz UBI (Universal Base Image) od Red Hat, który zawiera narzędzia deweloperskie.
-  * **`RUN microdnf install ...`**: `microdnf` to menadżer pakietów w UBI. Instaluje wszystkie niezbędne narzędzia do kompilacji i zarządzania kodem (`gcc-c++`, `git`, `npm`, `tar`). Jest to kluczowy etap, który dostarcza środowisko do przygotowania Twoich testów.
-  * **`RUN microdnf clean all ...`**: Oczyszcza system z tymczasowych plików i cache, aby końcowy obraz był jak najmniejszy.
-
-**Etap 2: `final`**
-
-  * **`FROM registry.access.redhat.com/ubi8-minimal-as-final`**: Zaczyna od nowa, tym razem z obrazu, który nie zawiera narzędzi deweloperskich. Jest to „czysty” obraz produkcyjny.
-  * **`COPY --from=builder ...`**: Kopiuje tylko gotowe pliki z pierwszego etapu (np. skompilowane biblioteki, kod testów) do finalnego obrazu, pomijając ciężkie narzędzia deweloperskie.
-  * **`USER 1001`**: Kluczowa instrukcja bezpieczeństwa. Tworzy i przełącza użytkownika na `1001`, który ma ograniczone uprawnienia. Zawsze należy unikać uruchamiania kontenerów jako `root`.
-  * **`CMD ["/bin/bash", "-c", "npm run test"]`**: Domyślna komenda, która zostanie wykonana, gdy kontener zostanie uruchomiony. Wymaga istnienia skryptu `test` w pliku `package.json`, który wywołuje testy Gatling (np. `gatling run ...`).
-
------
-
-#### 3.2. `azure-pipeline.yml` - Centralny mózg potoku 🧠
-
-Ten plik definiuje cały proces automatyzacji.
-
-  * **`parameters`**: Umożliwiają **parametryzację potoku**, co jest kluczowe dla elastyczności. Zmienne takie jak `gatlingUsers` mogą być dostosowywane przed każdym uruchomieniem.
-  * **`stages: Build`**: Potok jest podzielony na logiczne etapy.
-      * **`job: BuildDockerImage`**:
-          * **`pool: vmImage: 'ubuntu-latest'`**: Zadanie jest wykonywane na agencie Azure Pipelines.
-          * **`task: Docker@2`**: Wbudowane zadanie Azure DevOps.
-              * `command: 'buildAndPush'`: Buduje obraz na podstawie `Dockerfile` i wypycha go do **Azure Container Registry (ACR)**.
-      * **`job: ContainerScanningAndSync`**:
-          * **`dependsOn: BuildDockerImage`**: Ta instrukcja tworzy **zależność**. Zadanie to rozpocznie się tylko, gdy `BuildDockerImage` zakończy się sukcesem.
-          * **`task: BSKContainerScanning@3`**: Integracja z zewnętrznym skanerem bezpieczeństwa, który sprawdza obraz pod kątem luk.
-          * **`task: AzureKeyVault@1`**: Bezpiecznie pobiera poufne dane (hasła, klucze API) z **Azure Key Vault**, chroniąc je przed przechowywaniem w kodzie.
-          * **`task: Copy onboard integration to stlx04021`**: To zadanie wywołuje skrypt, który uruchamia playbook Ansible **`docker_load.yml`**. Jest to moment, w którym kontrola zostaje przekazana do zdalnego hosta.
-          * **`task: PublishTestResults@2`**: Pobiera plik `junit_report_from_log.xml` i **parsuje go**, tworząc czytelny raport w Azure DevOps.
-          * **`script`**: Skrypt w Bashu, który na podstawie statusu zadań (np. `Agent.JobStatus`) ustawia zmienne `STATUS` i `STATUS_COLOR`.
-          * **`ansible-playbook scripts/send-test-results-mail.yml`**: Na końcu, potok wywołuje playbook **`send-test-results-mail.yml`**, który używa zebranych zmiennych do wysłania e-maila.
-
------
-
-#### 3.3. `docker_load.yml` - Operator na zdalnym serwerze ⚙️
-
-To playbook Ansible, który wykonuje operacje na docelowym serwerze testowym.
-
-  * **`hosts: all`**: Playbook jest wykonywany na wszystkich hostach zdefiniowanych w inwentarzu.
-  * **`become: yes`**: Umożliwia uruchamianie zadań z podwyższonymi uprawnieniami (np. `root`), co jest niezbędne do zarządzania kontenerami.
-  * **`tasks`**:
-      * **`Load Docker image from the found folder`**: Zamiast `docker pull`, używa **`podman load`**. **Podman** jest alternatywą dla Dockera, która działa bez demona, co zwiększa bezpieczeństwo.
-      * **`Run Docker/Podman image in detached mode...`**: Kluczowy task, który uruchamia kontener w tle (`-d`). Przekazuje do niego **zmienne środowiskowe** (np. `GATLING_USERS`), które sterują testami.
-      * **`Wait for the container to complete...`**: Ta instrukcja sprawia, że Ansible **blokuje** dalsze wykonanie, dopóki kontener nie zakończy działania.
-      * **`Copy JUnit report from container...`**: Wyniki są kopiowane z kontenera na serwer, a następnie `Fetch JUnit report` pobiera je na agenta Azure Pipelines.
-      * **`Global cleanup of all Podman/Docker containers...`**: **Konieczny etap czyszczenia**. Zatrzymuje i usuwa wszystkie nieużywane kontenery i obrazy, by utrzymać serwer w czystości i zapobiec wyczerpaniu zasobów.
-
------
-
-#### 3.4. `send-test-results-mail.yml` - Komunikator wyników 📬
-
-Ostatni krok w potoku, który zapewnia komunikację.
-
-  * **`hosts: local`**: Playbook jest wykonywany na agencie Azure Pipelines, gdzie dostępne są wszystkie dane.
-  * **`tasks`**:
-      * **`name: Send email about test results`**: Używa modułu `community.general.mail`.
-      * `subject`: Tytuł wiadomości jest **dynamiczny** (`{{ status }}`).
-      * `body`: Treść wiadomości jest w **HTML**, co pozwala na użycie kolorów (`{{ status_color }}`) i linków.
-      * `attach`: Do wiadomości dołączane jest spakowane archiwum z raportami, co ułatwia dostęp do pełnych wyników.
-
------
-
-### Wskazówki do odtworzenia procesu
-
-1.  **Przepakuj swoje testy do Dockera:** Upewnij się, że Twój `Dockerfile` poprawnie kopiuje kod testów i że polecenie `CMD` uruchamia je prawidłowo.
-2.  **Dostosuj parametry:** W `azure-pipeline.yml` zmień nazwy repozytoriów, pul agentów i adresy e-mail na swoje.
-3.  **Dopasuj ścieżki i nazwy:** W `docker_load.yml` dostosuj nazwy plików raportów i ścieżki na serwerze, jeśli różnią się od domyślnych.
-4.  **Upewnij się, że Ansible może połączyć się z serwerem:** Skonfiguruj inwentarz i uprawnienia SSH, aby agent Azure DevOps mógł zarządzać zdalnym serwerem.
-5.  **Dopasuj adresy e-mail:** Zaktualizuj adresy `to` i `from` w `send-test-results-mail.yml` zgodnie z Twoimi potrzebami.
-
-Ten proces jest wzorowym przykładem **automatyzacji od początku do końca**, która obejmuje budowanie, bezpieczeństwo, wdrożenie, testowanie i komunikację.
+* **Publikacja raportów JUnit w Azure DevOps**: Wyniki testów są wizualizowane i dostępne bezpośrednio w interfejsie DevOps.
+* **Ustawienie statusu końcowego**: Automatyczne generowanie statusu potoku (Success / Failure) oraz koloru raportu.
+* **Wysłanie e-maila z rezultatami testów i załącznikami**: Playbook Ansible **`send-test-results-mail.yml`** odpowiada za wysyłkę kompletnego podsumowania.
+* **(Opcjonalnie) Czyszczenie lokalnych plików tymczasowych**: Usunięcie artefaktów powstałych podczas procesu build/deploy na agencie Azure Pipelines.
