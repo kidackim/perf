@@ -1,18 +1,20 @@
 version: '3.8'
 
 services:
-  test-app:
-    build: .
-    container_name: test-app-container
-    environment:
-      - CYPRESS_RECORD_KEY=${CYPRESS_RECORD_KEY}
-      - OTHER_ENV_VAR=${OTHER_ENV_VAR}
-      - NODE_TLS_REJECT_UNAUTHORIZED=0
+  test-framework:
+    build:
+      context: .
+      args:
+        - HTTP_PROXY=http://fjpg-proxy.pl.ing-ad:8080
+        - HTTPS_PROXY=http://fjpg-proxy.pl.ing-ad:8080
+    container_name: test-framework-container
     ports:
-      - "3000:3000"  # Przykładowy port, dostosuj do potrzeb
+      - "8080:8080"
+    environment:
+      - NODE_TLS_REJECT_UNAUTHORIZED=0
+      - HTTP_PROXY=http://fjpg-proxy.pl.ing-ad:8080
+      - HTTPS_PROXY=http://fjpg-proxy.pl.ing-ad:8080
+      - NO_PROXY=*.ing-ad,localhost,127.0.0.1
     volumes:
-      - ./cypress/videos:/app/cypress/videos
-      - ./cypress/screenshots:/app/cypress/screenshots
-      - ./mochareports:/app/mochareports
-      - ./logs:/app/logs
-    command: ["npm", "run", "test"] # Zmień na odpowiednie polecenie
+      - .:/app
+    # command: ["npm", "run", "cy:run"]
