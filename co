@@ -1,20 +1,21 @@
-version: '3.8'
+ENV CYPRESS_VERSION="13.14.1"
 
-services:
-  test-framework:
-    build:
-      context: .
-      args:
-        - HTTP_PROXY=http://fjpg-proxy.pl.ing-ad:8080
-        - HTTPS_PROXY=http://fjpg-proxy.pl.ing-ad:8080
-    container_name: test-framework-container
-    ports:
-      - "8080:8080"
-    environment:
-      - NODE_TLS_REJECT_UNAUTHORIZED=0
-      - HTTP_PROXY=http://fjpg-proxy.pl.ing-ad:8080
-      - HTTPS_PROXY=http://fjpg-proxy.pl.ing-ad:8080
-      - NO_PROXY=*.ing-ad,localhost,127.0.0.1
-    volumes:
-      - .:/app
-    # command: ["npm", "run", "cy:run"]
+# Pobierz Cypressa ręcznie za pomocą curl
+# Użyj opcji --proxy, aby skierować ruch przez proxy, i -k, aby pominąć weryfikację SSL
+RUN curl --proxy http://adres_ip_proxy:port \
+    -k https://cdn.cypress.io/desktop/${CYPRESS_VERSION}/platform=linux&arch=x64 \
+    --output cypress.tgz
+
+# Rozpakuj pobrany plik
+RUN tar -xzf cypress.tgz && rm cypress.tgz
+
+# Skonfiguruj ścieżkę, aby Cypress był dostępny w terminalu
+ENV PATH="/usr/local/bin:${PATH}"
+# Przenieś rozpakowany plik do odpowiedniego katalogu
+RUN mv cypress /usr/local/bin/
+
+# Instalacja dodatkowych zależności, jeśli są potrzebne do uruchomienia Cypressa
+# RUN apt-get update && apt-get install -y <zaleznosci_systemowe>
+
+# Przykładowy RUN, który używa Cypressa
+# RUN cypress run
