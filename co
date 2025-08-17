@@ -1,93 +1,18 @@
-# Etap 1: builder - budowanie i instalacja zależności
-FROM registry.access.redhat.com/ubi8/minimal AS builder
+version: '3.8'
 
-# Ustawienie użytkownika root do instalacji pakietów systemowych
-USER root
-
-# Instalacja podstawowych narzędzi systemowych
-RUN microdnf update -y && \
-    microdnf install -y \
-        tar \
-        gzip \
-        gcc-c++ \
-        make \
-        autoconf \
-        libtool \
-        glibc-devel \
-        libstdc++-devel \
-        git \
-        sqlite \
-        ca-certificates \
-        openssl \
-        bzip2 \
-    && microdnf clean all && rm -rf /var/cache/yum/*
-
-# Użycie zmiennych do definiowania wersji Node.js (jak w Gatlingu)
-ARG NODE_VERSION=18.20.1
-ENV PATH="/usr/local/bin:${PATH}"
-
-# Pobranie i instalacja Node.js
-RUN curl -sSL "https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-x64.tar.xz" | tar -xJ --strip-components=1 -C /usr/local
-RUN chmod -R 755 /usr/local/bin/node /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/corepack
-
-# Ustawienie katalogu roboczego
-WORKDIR /app
-
-# Kopiowanie package.json i instalacja zależności
-COPY package.json .
-RUN npm config set strict-ssl false && \
-    npm install --unsafe-perm
-
-# Etap 2: final - tworzenie lekkiego obrazu końcowego
-FROM registry.access.redhat.com/ubi8/minimal AS final
-
-# Ustawienie użytkownika root do instalacji przeglądarki
-USER root
-
-# Instalacja zależności systemowych, w tym przeglądarki Electron
-# Cypress wymaga pewnych bibliotek graficznych, nawet w trybie headless
-# Poniższa lista jest często wymagana do uruchomienia Cypressa w kontenerze
-RUN microdnf update -y && \
-    microdnf install -y \
-        tar \
-        gzip \
-        bzip2 \
-        libX11 \
-        libXext \
-        libXrender \
-        libXtst \
-        libxkbfile \
-        gtk3 \
-        libnotify \
-        nss \
-        alsa-lib \
-        libgbm \
-        libxcb \
-        libXcomposite \
-        libXdamage \
-        libXrandr \
-        libasound \
-        mesa-libglapi \
-    && microdnf clean all && rm -rf /var/cache/yum/*
-
-# Kopiowanie Node.js i modułów z etapu builder
-COPY --from=builder /usr/local /usr/local
-COPY --from=builder /app/node_modules ./node_modules
-COPY package.json .
-
-# Ustawienie katalogu roboczego
-WORKDIR /app
-
-# Ustawienie zmiennych środowiskowych
-ENV PATH="/usr/local/bin:${PATH}"
-ENV NODE_TLS_REJECT_UNAUTHORIZED=0
-
-# Kopiowanie plików projektu
-COPY . .
-
-# Przełączenie na użytkownika niebędącego rootem
-USER 1001
-
-# Komenda do uruchomienia testów
-# Używamy npm run cy:run tak jak w package.json
-CMD ["npm", "run", "cy:run"]
+services:
+  test-app:
+    build: .
+    container_name: test-app-container
+    environment:
+      - CYPRESS_RECORD_KEY=${CYPRESS_RECORD_KEY}
+      - OTHER_ENV_VAR=${OTHER_ENV_VAR}
+      - NODE_TLS_REJECT_UNAUTHORIZED=0
+    ports:
+      - "3000:3000"  # Przykładowy port, dostosuj do potrzeb
+    volumes:
+      - ./cypress/videos:/app/cypress/videos
+      - ./cypress/screenshots:/app/cypress/screenshots
+      - ./mochareports:/app/mochareports
+      - ./logs:/app/logs
+    command: ["npm", "run", "test"] # Zmień na odpowiednie polecenie
