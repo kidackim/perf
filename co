@@ -1,1 +1,1 @@
- COPY --from=builder /root/.cache/Cypress /home/node/.cache/Cypress
+COPY --from=builder --chown=1001:1001 /root/.cache/Cypress /home/1001/.cache/Cypress
