@@ -1,1 +1,48 @@
-RUN cp -r /usr/local/cypress/node_modules /usr/local/
+# Ustawienie zmiennej środowiskowej z wersją Cypressa
+ENV CYPRESS_VERSION=13.14.1
+
+# Ustawienie zmiennej środowiskowej dla URL pobierania
+ENV CYPRESS_DOWNLOAD_URL=https://cdn.cypress.io/desktop/${CYPRESS_VERSION}/platform=linux&arch=x64.zip
+
+# Instalacja zależności systemowych (wymagane przez Cypressa)
+# Używam microdnf, ponieważ zrzuty ekranu wskazują na obraz Red Hat (ubi-minimal)
+RUN microdnf update -y && \
+    microdnf install -y \
+    fontconfig \
+    libX11 \
+    libXcomposite \
+    libXcursor \
+    libXext \
+    libXfixes \
+    libXi \
+    libXtst \
+    libgconf \
+    libnss \
+    libxkbcommon \
+    mesa-libGLU \
+    libXrender \
+    libxshmfence \
+    alsa-lib \
+    tar \
+    gzip \
+    curl \
+    unzip && \
+    microdnf clean all
+
+# Utworzenie katalogu docelowego dla instalacji Cypressa
+RUN mkdir -p /opt/cypress
+
+# Pobranie pliku .zip
+RUN curl -L -o /opt/cypress/cypress.zip ${CYPRESS_DOWNLOAD_URL}
+
+# Rozpakowanie archiwum do katalogu docelowego
+RUN unzip -q /opt/cypress/cypress.zip -d /opt/cypress
+
+# Usunięcie pliku .zip, aby zmniejszyć rozmiar obrazu
+RUN rm /opt/cypress/cypress.zip
+
+# Ustawienie zmiennej PATH, aby komenda `cypress` była dostępna
+ENV PATH="/opt/cypress/Cypress/resources/app/bin:${PATH}"
+
+# Wskazanie ścieżki do pliku wykonywalnego Cypressa (zgodnie z dokumentacją)
+ENV CYPRESS_INSTALL_BINARY=/opt/cypress/Cypress/Cypress
