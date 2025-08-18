@@ -1,8 +1,2 @@
-RUN curl -L -k -o - https://github.com/cypress-io/cypress/archive/refs/tags/v14.5.4.tar.gz | tar -xz -C /usr/local/
-
-# Zmiana nazwy katalogu
-# Github pobiera plik do katalogu o nazwie 'cypress-14.5.4'
-RUN mv /usr/local/cypress-14.5.4 /usr/local/cypress
-
-# Ustawienie zmiennej PATH, aby komendy Cypress były dostępne globalnie
-ENV PATH="/usr/local/cypress/bin:${PATH}"
+# Ustawienie zmiennej środowiskowej CYPRESS_BINARY_PATH
+ENV CYPRESS_BINARY_PATH="/usr/local/cypress/bin/cypress"
