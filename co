@@ -1,2 +1,1 @@
-# Ustawienie zmiennej środowiskowej CYPRESS_BINARY_PATH
-ENV CYPRESS_BINARY_PATH="/usr/local/cypress/bin/cypress"
+RUN cp -r /usr/local/cypress/node_modules /usr/local/
