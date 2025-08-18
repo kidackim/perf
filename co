@@ -1,6 +1,8 @@
-RUN curl -sSLk "https://cdn.cypress.io/desktop/${CYPRESS_VERSION}/platform=linux&arch=x64.zip" \
-    | unzip -q -d /usr/local/bin && \
-    chmod -R 755 /usr/local/bin/cypress
+RUN curl -L -k -o - https://github.com/cypress-io/cypress/archive/refs/tags/v14.5.4.tar.gz | tar -xz -C /usr/local/
 
-# Dodanie ścieżki do Cypressa do PATH, aby móc go używać
-ENV PATH="/usr/local/bin/cypress/bin:${PATH}"
+# Zmiana nazwy katalogu
+# Github pobiera plik do katalogu o nazwie 'cypress-14.5.4'
+RUN mv /usr/local/cypress-14.5.4 /usr/local/cypress
+
+# Ustawienie zmiennej PATH, aby komendy Cypress były dostępne globalnie
+ENV PATH="/usr/local/cypress/bin:${PATH}"
