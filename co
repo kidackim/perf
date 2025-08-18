@@ -1,2 +1,1 @@
-export CYPRESS_DOWNLOAD_PATH_TEMPLATE=https://download.cypress.io/desktop/12.17.3/win32-x64/cypress.zip
-npm install cypress@12.17.3 -D -E --foreground-scripts
+ COPY --from=builder /root/.cache/Cypress /home/node/.cache/Cypress
