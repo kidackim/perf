@@ -1,1 +1,1 @@
-COPY --from=builder --chown=1001:1001 /root/.cache/Cypress /home/1001/.cache/Cypress
+ENV CYPRESS_RUN_BINARY="/home/1001/.cache/Cypress/14.5.4/Cypress-14.5.4/Cypress"
