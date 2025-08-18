@@ -1,14 +1,6 @@
-# Instalacja narzędzia do pobierania (np. curl) i rozpakowywania (unzip)
-RUN apt-get update && apt-get install -y curl unzip
+RUN curl -sSLk "https://cdn.cypress.io/desktop/${CYPRESS_VERSION}/platform=linux&arch=x64.zip" \
+    | unzip -q -d /usr/local/bin && \
+    chmod -R 755 /usr/local/bin/cypress
 
-# Pobranie pliku .zip
-RUN curl -L -k https://cdn.cypress.io/desktop/13.14.1/platform=linux&arch=x64.zip -o cypress.zip
-
-# Rozpakowanie pliku .zip do katalogu /opt
-RUN unzip cypress.zip -d /opt/
-
-# Usunięcie archiwum
-RUN rm cypress.zip
-
-# Ustawienie zmiennej PATH, aby komendy Cypress były dostępne globalnie
-ENV PATH="/opt/cypress/bin:${PATH}"
+# Dodanie ścieżki do Cypressa do PATH, aby móc go używać
+ENV PATH="/usr/local/bin/cypress/bin:${PATH}"
