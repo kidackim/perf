@@ -1,3 +1,10 @@
+RUN dnf -y install 'dnf-command(config-manager)'
+
+# Włączenie repozytorium AppStream
+# Pakiety takie jak Xvfb są często umieszczane w tym repozytorium.
+RUN dnf config-manager --set-enabled AppStream
+
+# Instalacja Xvfb oraz innych niezbędnych zależności
 RUN dnf install -y xorg-x11-server-Xvfb \
     gtk3 \
     libXt \
