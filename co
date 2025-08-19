@@ -1,16 +1,19 @@
 RUN microdnf install -y dnf && \
-    dnf install -y --disablerepo '*' \
-    --enablerepo=codeready-builder-for-rhel-8-x86_64-rpms \
-    'xorg-x11-server-Xvfb' \
-    'fontconfig' \
-    'freetype' \
-    'libX11' \
-    'libXext' \
-    'libXrender' \
-    'libXtst' \
-    'libasound' \
-    'libgbm' \
-    'libxkbcommon' \
-    'mesa-libGL' \
-    'nss' && \
+    dnf install -y https://dl.fedoraproject.org/pub/epel/epel-release-latest-8.noarch.rpm && \
+    dnf clean all
+
+# Zainstaluj potrzebne zależności z repozytorium EPEL
+RUN dnf install -y \
+    xorg-x11-server-Xvfb \
+    fontconfig \
+    freetype \
+    libX11 \
+    libXext \
+    libXrender \
+    libXtst \
+    libasound \
+    libgbm \
+    libxkbcommon \
+    mesa-libGL \
+    nss && \
     dnf clean all
