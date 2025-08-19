@@ -1,1 +1,16 @@
-ENV PATH="/usr/local/bin:/e2e/node_modules/.bin:${PATH}"
+RUN microdnf update && \
+    microdnf install -y \
+    Xvfb \
+    fontconfig \
+    freetype \
+    libX11 \
+    libXext \
+    libXrender \
+    libXtst \
+    libasound \
+    libgbm \
+    libxkbcommon \
+    mesa-libGL \
+    nss \
+    && \
+    microdnf clean all
