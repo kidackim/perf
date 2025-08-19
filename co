@@ -1,1 +1,25 @@
-https://cdn.cypress.io/desktop/14.5.4/linux-x64/cypress.zip
+# Etap 1: Budowanie i instalacja
+# Użyj standardowego obrazu Node.js, aby zainstalować Cypressa bez blokad sieciowych.
+FROM node:20 AS builder
+
+# Ustaw katalog roboczy w tym etapie
+WORKDIR /app
+
+# Ustaw zmienną środowiskową, aby Cypress zapisał pliki w tymczasowej lokalizacji
+ENV CYPRESS_CACHE_FOLDER=/app/cache
+RUN npm install cypress
+
+# Etap 2: Finalny obraz
+# Użyj swojego obrazu bazowego Red Hat ubi-minimal.
+FROM registry.access.redhat.com/ubi8/ubi-minimal
+
+# Skopiuj kluczowe pliki z pierwszego etapu do ostatecznego obrazu
+# Ta metoda jest bardzo wydajna, ponieważ przenosisz tylko gotowe pliki.
+COPY --from=builder /app/node_modules /app/node_modules
+COPY --from=builder /app/cache /app/cache
+
+# Ustaw katalog roboczy w finalnym obrazie
+WORKDIR /app
+
+# Weryfikacja instalacji - polecenie zadziała, ponieważ pliki są już na miejscu
+CMD ["./node_modules/.bin/cypress", "--version"]
