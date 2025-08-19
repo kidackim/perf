@@ -1,13 +1,1 @@
-
-# Skopiuj Node.js, npm, npx i inne biblioteki
-COPY --from=builder /usr/local/bin/node /usr/local/bin/
-COPY --from=builder /usr/local/bin/npm /usr/local/bin/
-COPY --from=builder /usr/local/bin/npx /usr/local/bin/
-COPY --from=builder /usr/local/lib/node_modules /usr/local/lib/node_modules
-
-# Skopiuj folder node_modules zawierający Cypressa
-WORKDIR /e2e
-COPY --from=builder /e2e/node_modules ./node_modules
-
-# Skopiuj cache Cypressa
-COPY --from=builder /root/.cache/Cypress /root/.cache/Cypress
+ENV PATH="/usr/local/bin:/e2e/node_modules/.bin:${PATH}"
