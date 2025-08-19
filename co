@@ -1,6 +1,6 @@
 RUN microdnf update && \
     microdnf install -y \
-    Xvfb \
+    xorg-x11-server-Xvfb \
     fontconfig \
     freetype \
     libX11 \
