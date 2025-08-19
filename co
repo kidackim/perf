@@ -1,12 +1,12 @@
-RUN microdnf install -y dnf && \
-    curl --insecure -o epel-release-latest-8.noarch.rpm \
-    https://dl.fedoraproject.org/pub/epel/epel-release-latest-8.noarch.rpm && \
-    dnf install -y epel-release-latest-8.noarch.rpm && \
-    dnf clean all
+RUN microdnf install -y wget dnf
 
-# Zainstaluj potrzebne zależności
+# Pobierz i zainstaluj ręcznie pakiet xorg-x11-server-Xvfb
+RUN wget -O /tmp/xorg.rpm https://rpmfind.net/linux/centos/8-stream/AppStream/x86_64/os/Packages/xorg-x11-server-Xvfb-1.20.14-1.el8.x86_64.rpm && \
+    dnf install -y /tmp/xorg.rpm && \
+    rm /tmp/xorg.rpm
+
+# Zainstaluj pozostałe zależności
 RUN dnf install -y \
-    xorg-x11-server-Xvfb \
     fontconfig \
     freetype \
     libX11 \
@@ -17,5 +17,6 @@ RUN dnf install -y \
     libgbm \
     libxkbcommon \
     mesa-libGL \
-    nss && \
+    nss \
+    && \
     dnf clean all
