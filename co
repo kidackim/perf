@@ -1,66 +1,11 @@
-# Etap 1: Builder - instalacja i przygotowanie plików Node.js i Cypressa
-FROM cypress/included:13.13.0 AS builder
-
-WORKDIR /e2e
-COPY package*.json ./
-RUN npm install
-COPY . .
-
-#--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-
-# Etap 2: Dostawca zależności systemowych
-# Użyjemy Almalinuxa, aby zainstalować wszystkie brakujące pakiety systemowe.
-FROM almalinux:8 AS deps-provider
-
-# Zainstaluj potrzebne zależności graficzne
-RUN dnf install -y \
-    xorg-x11-server-Xvfb \
-    alsa-lib \
-    fontconfig \
-    freetype \
-    libX11 \
-    libXext \
-    libXrender \
-    libXtst \
-    libgbm \
-    libxkbcommon \
-    mesa-libGL \
+RUN dnf install -y xorg-x11-server-Xvfb \
+    gtk3 \
+    libXt \
+    mesa-libgbm \
+    libdrm \
+    libxkbcommon-x11 \
+    libnss3 \
     nss \
-    && \
+    cups-libs && \
+    # Czyszczenie cache dnf w celu zmniejszenia rozmiaru obrazu
     dnf clean all
-
-#--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-
-# Etap 3: Finalny obraz na bazie UBI 8
-# Skopiujemy do niego potrzebne pliki z obu poprzednich etapów.
-FROM registry.access.redhat.com/ubi8/ubi
-
-# Skopiuj Node.js i npm z etapu 1 (builder)
-COPY --from=builder /usr/local/bin/node /usr/local/bin/
-COPY --from=builder /usr/local/bin/npm /usr/local/bin/npm
-COPY --from=builder /usr/local/bin/npx /usr/local/bin/npx
-COPY --from=builder /usr/local/lib/node_modules /usr/local/lib/node_modules
-
-# Skopiuj wszystkie biblioteki systemowe z etapu 2 (deps-provider)
-# Używamy --chown=root:root i --chmod=755, aby zachować uprawnienia
-COPY --from=deps-provider --chown=root:root /usr/lib64/ /usr/lib64/
-COPY --from=deps-provider --chown=root:root /usr/bin/Xvfb /usr/bin/
-COPY --from=deps-provider --chown=root:root /usr/bin/alsa* /usr/bin/
-
-# Skopiuj folder node_modules z etapu 1
-WORKDIR /e2e
-COPY --from=builder /e2e/node_modules ./node_modules
-
-# Skopiuj cache Cypressa z etapu 1
-COPY --from=builder /root/.cache/Cypress /root/.cache/Cypress
-
-# Skopiuj pliki projektu z etapu 1
-COPY --from=builder /e2e/cypress ./cypress
-COPY --from=builder /e2e/package*.json ./
-COPY --from=builder /e2e/cypress.config.js ./
-
-# Ustaw zmienną PATH
-ENV PATH="/usr/local/bin:/e2e/node_modules/.bin:${PATH}"
-
-# Polecenie do uruchomienia Cypressa
-CMD ["npx", "cypress", "run"]
