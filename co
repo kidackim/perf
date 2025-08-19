@@ -1,1 +1,1 @@
-RUN curl "https://download.cypress.io/desktop/${CYPRESS_VERSION}" | tar xz -C /home/1001/.cache/
+https://cdn.cypress.io/desktop/14.5.4/linux-x64/cypress.zip
