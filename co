@@ -1,7 +1,5 @@
-# Instalacja niezbędnych zależności systemowych
-# Używamy --disablerepo i --enablerepo, aby uzyskać dostęp do pakietów
-RUN microdnf update && \
-    microdnf install -y \
+RUN dnf install -y \
+    xorg-x11-server-Xvfb \
     fontconfig \
     freetype \
     libX11 \
@@ -14,4 +12,4 @@ RUN microdnf update && \
     mesa-libGL \
     nss \
     && \
-    microdnf clean all
+    dnf clean all
