@@ -1,1 +1,1 @@
-ENV CYPRESS_RUN_BINARY="/home/1001/.cache/Cypress/14.5.4/Cypress-14.5.4/Cypress"
+RUN curl "https://download.cypress.io/desktop/${CYPRESS_VERSION}" | tar xz -C /home/1001/.cache/
