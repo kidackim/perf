@@ -1,16 +1,16 @@
-RUN microdnf update && \
-    microdnf install -y \
-    xorg-x11-server-Xvfb \
-    fontconfig \
-    freetype \
-    libX11 \
-    libXext \
-    libXrender \
-    libXtst \
-    libasound \
-    libgbm \
-    libxkbcommon \
-    mesa-libGL \
-    nss \
-    && \
-    microdnf clean all
+RUN microdnf install -y dnf && \
+    dnf install -y --disablerepo '*' \
+    --enablerepo=codeready-builder-for-rhel-8-x86_64-rpms \
+    'xorg-x11-server-Xvfb' \
+    'fontconfig' \
+    'freetype' \
+    'libX11' \
+    'libXext' \
+    'libXrender' \
+    'libXtst' \
+    'libasound' \
+    'libgbm' \
+    'libxkbcommon' \
+    'mesa-libGL' \
+    'nss' && \
+    dnf clean all
