@@ -1,9 +1,11 @@
+# Instalacja niezbędnych narzędzi
 RUN microdnf install -y wget dnf
 
-# Pobierz i zainstaluj ręcznie pakiet xorg-x11-server-Xvfb
-RUN wget -O /tmp/xorg.rpm https://rpmfind.net/linux/centos/8-stream/AppStream/x86_64/os/Packages/xorg-x11-server-Xvfb-1.20.14-1.el8.x86_64.rpm && \
-    dnf install -y /tmp/xorg.rpm && \
-    rm /tmp/xorg.rpm
+# Pobierz i zainstaluj ręcznie pakiet xorg-x11-server-Xvfb i jego zależności
+RUN wget -O /tmp/xorg.rpm https://repo.almalinux.org/almalinux/8/AppStream/x86_64/os/Packages/xorg-x11-server-Xvfb-1.20.11-25.el8_10.x86_64.rpm && \
+    wget -O /tmp/xorg-common.rpm https://repo.almalinux.org/almalinux/8/AppStream/x86_64/os/Packages/xorg-x11-server-common-1.20.11-25.el8_10.x86_64.rpm && \
+    dnf install -y /tmp/xorg.rpm /tmp/xorg-common.rpm && \
+    rm /tmp/xorg.rpm /tmp/xorg-common.rpm
 
 # Zainstaluj pozostałe zależności
 RUN dnf install -y \
