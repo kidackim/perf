@@ -1,19 +1,10 @@
-FROM registry.access.redhat.com/ubi8/ubi-minimal
-
-# Skopiuj Node.js i npm z buildera
-COPY --from=builder /usr/local/bin/node /usr/local/bin/
-COPY --from=builder /usr/local/bin/npm /usr/local/bin/
+# Skopiuj npx i powiązane biblioteki
+COPY --from=builder /usr/local/bin/npx /usr/local/bin/
 COPY --from=builder /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/npm
+COPY --from=builder /usr/local/bin/npm /usr/local/bin/npm
 
-# Skopiuj cały folder node_modules z buildera, zawierający Cypressa
-WORKDIR /e2e
+# Skopiuj folder node_modules zawierający Cypressa
 COPY --from=builder /e2e/node_modules ./node_modules
 
 # Skopiuj cache Cypressa
 COPY --from=builder /root/.cache/Cypress /root/.cache/Cypress
-
-# Skopiuj pliki projektu do finalnego obrazu
-COPY . .
-
-# Polecenie do uruchomienia Cypressa
-CMD ["npx", "cypress", "run"]
