@@ -1,14 +1,7 @@
-# Instalacja niezbędnych narzędzi
-RUN microdnf install -y wget dnf
-
-# Pobierz i zainstaluj ręcznie pakiet xorg-x11-server-Xvfb i jego zależności
-RUN wget -O /tmp/xorg.rpm https://repo.almalinux.org/almalinux/8/AppStream/x86_64/os/Packages/xorg-x11-server-Xvfb-1.20.11-25.el8_10.x86_64.rpm && \
-    wget -O /tmp/xorg-common.rpm https://repo.almalinux.org/almalinux/8/AppStream/x86_64/os/Packages/xorg-x11-server-common-1.20.11-25.el8_10.x86_64.rpm && \
-    dnf install -y /tmp/xorg.rpm /tmp/xorg-common.rpm && \
-    rm /tmp/xorg.rpm /tmp/xorg-common.rpm
-
-# Zainstaluj pozostałe zależności
-RUN dnf install -y \
+# Instalacja niezbędnych zależności systemowych
+# Używamy --disablerepo i --enablerepo, aby uzyskać dostęp do pakietów
+RUN microdnf update && \
+    microdnf install -y \
     fontconfig \
     freetype \
     libX11 \
@@ -21,4 +14,4 @@ RUN dnf install -y \
     mesa-libGL \
     nss \
     && \
-    dnf clean all
+    microdnf clean all
