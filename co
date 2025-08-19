@@ -1,25 +1,34 @@
-# Etap 1: Budowanie i instalacja
-# Użyj standardowego obrazu Node.js, aby zainstalować Cypressa bez blokad sieciowych.
-FROM node:20 AS builder
+# Etap 1: Builder - instalacja wszystkich zależności
+# Użyj oficjalnego obrazu Cypressa, który zawiera Node.js i wszystkie niezbędne narzędzia.
+FROM cypress/base:20 AS cypress-builder
 
 # Ustaw katalog roboczy w tym etapie
 WORKDIR /app
 
-# Ustaw zmienną środowiskową, aby Cypress zapisał pliki w tymczasowej lokalizacji
-ENV CYPRESS_CACHE_FOLDER=/app/cache
-RUN npm install cypress
+# Skopiuj pliki package.json i package-lock.json
+COPY package*.json ./
 
-# Etap 2: Finalny obraz
-# Użyj swojego obrazu bazowego Red Hat ubi-minimal.
+# Zainstaluj zależności, w tym Cypressa
+RUN npm install
+
+# Weryfikacja instalacji w etapie budowania
+RUN npm run cypress -- --version
+
+#-------------------------------------------------------------------------------------------------------
+
+# Etap 2: Finalny obraz - przenoszenie plików
+# Użyj swojego obrazu bazowego Red Hat ubi-minimal
 FROM registry.access.redhat.com/ubi8/ubi-minimal
-
-# Skopiuj kluczowe pliki z pierwszego etapu do ostatecznego obrazu
-# Ta metoda jest bardzo wydajna, ponieważ przenosisz tylko gotowe pliki.
-COPY --from=builder /app/node_modules /app/node_modules
-COPY --from=builder /app/cache /app/cache
 
 # Ustaw katalog roboczy w finalnym obrazie
 WORKDIR /app
 
-# Weryfikacja instalacji - polecenie zadziała, ponieważ pliki są już na miejscu
-CMD ["./node_modules/.bin/cypress", "--version"]
+# Skopiuj folder node_modules z buildera do finalnego obrazu
+# Ta komenda przenosi wszystkie zainstalowane pakiety bez potrzeby ich ponownego pobierania.
+COPY --from=cypress-builder /app/node_modules /app/node_modules
+
+# Opcjonalnie, skopiuj inne pliki projektu (np. testy)
+COPY . .
+
+# Uruchom Cypressa - komenda działa, ponieważ wszystko zostało już skopiowane
+CMD ["./node_modules/.bin/cypress", "run"]
