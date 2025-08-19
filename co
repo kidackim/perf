@@ -1,8 +1,10 @@
 RUN microdnf install -y dnf && \
-    dnf install -y https://dl.fedoraproject.org/pub/epel/epel-release-latest-8.noarch.rpm && \
+    curl --insecure -o epel-release-latest-8.noarch.rpm \
+    https://dl.fedoraproject.org/pub/epel/epel-release-latest-8.noarch.rpm && \
+    dnf install -y epel-release-latest-8.noarch.rpm && \
     dnf clean all
 
-# Zainstaluj potrzebne zależności z repozytorium EPEL
+# Zainstaluj potrzebne zależności
 RUN dnf install -y \
     xorg-x11-server-Xvfb \
     fontconfig \
