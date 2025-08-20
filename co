@@ -1,16 +1,1 @@
-# Krok 1: Dodanie repozytorium CentOS 8 Stream
-RUN echo -e "[CentOS-8]\n\
-name=CentOS-8\n\
-baseurl=http://mirror.centos.org/centos/8-stream/AppStream/x86_64/os/\n\
-enabled=1\n\
-gpgcheck=1\n\
-gpgkey=https://www.centos.org/keys/RPM-GPG-KEY-CentOS-Official" > /etc/yum.repos.d/centos8.repo
-
-# Krok 2: Importowanie klucza GPG
-RUN rpm --import https://www.centos.org/keys/RPM-GPG-KEY-CentOS-Official
-
-# Krok 3: Instalacja pakietu Xvfb
-RUN dnf install -y xorg-x11-server-Xvfb
-
-# Czyszczenie cache, aby zmniejszyć rozmiar obrazu
-RUN dnf clean all
+https://vault.centos.org/8-stream/AppStream/x86_64/os/
