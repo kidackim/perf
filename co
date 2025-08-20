@@ -1,18 +1,16 @@
-RUN dnf -y install 'dnf-command(config-manager)'
+# Krok 1: Dodanie repozytorium CentOS 8 Stream
+RUN echo -e "[CentOS-8]\n\
+name=CentOS-8\n\
+baseurl=http://mirror.centos.org/centos/8-stream/AppStream/x86_64/os/\n\
+enabled=1\n\
+gpgcheck=1\n\
+gpgkey=https://www.centos.org/keys/RPM-GPG-KEY-CentOS-Official" > /etc/yum.repos.d/centos8.repo
 
-# Włączenie repozytorium AppStream
-# Pakiety takie jak Xvfb są często umieszczane w tym repozytorium.
-RUN dnf config-manager --set-enabled AppStream
+# Krok 2: Importowanie klucza GPG
+RUN rpm --import https://www.centos.org/keys/RPM-GPG-KEY-CentOS-Official
 
-# Instalacja Xvfb oraz innych niezbędnych zależności
-RUN dnf install -y xorg-x11-server-Xvfb \
-    gtk3 \
-    libXt \
-    mesa-libgbm \
-    libdrm \
-    libxkbcommon-x11 \
-    libnss3 \
-    nss \
-    cups-libs && \
-    # Czyszczenie cache dnf w celu zmniejszenia rozmiaru obrazu
-    dnf clean all
+# Krok 3: Instalacja pakietu Xvfb
+RUN dnf install -y xorg-x11-server-Xvfb
+
+# Czyszczenie cache, aby zmniejszyć rozmiar obrazu
+RUN dnf clean all
