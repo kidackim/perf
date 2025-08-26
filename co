@@ -1,17 +1,3 @@
-- name: Uruchom kontener Docker/Podman, wstrzyknij zmienne i uruchom testy
-  ansible.builtin.command:
-    argv:
-      - "podman"
-      - "run"
-      - "-d"
-      - "--name"
-      - "cypress-test-runner"
-      - "-e"
-      - "DB_PASSWORD={{ HCEWSPLOCAL-DB-PASS }}"
-      - "-e"
-      - "KEYCLOAK_TOKEN_PASSWORD={{ B9802677-PASS }}"
-      - "{{ image_to_run_name }}"
-      - "/bin/bash"
-      - "-c"
-      - "jq --arg password \"$DB_PASSWORD\" --arg keycloak_tokenPassword \"$KEYCLOAK_TOKEN_PASSWORD\" ' .password = $password | .keycloak_tokenPassword = $keycloak_tokenPassword ' cypress.env.json > temp.json && mv temp.json cypress.env.json && cypress run"
-  register: run_container_detached_result
+jq --arg password TEST --arg keycloak_tokenPassword TEST_2 \
+  '.password |= $password | .keycloak_tokenPassword |= $keycloak_tokenPassword' \
+  cypress.env.json > temp.json && mv temp.json cypress.env.jso
