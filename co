@@ -1,1 +1,6 @@
-jq --arg password "$DB_PASSWORD" --arg keycloak_tokenPassword "$KEYCLOAK_TOKEN_PASSWORD" '.password |= $password | .keycloak_tokenPassword |= $keycloak_tokenPassword' cypress.env.json > temp.json && mv temp.json cypress.env.json
+ /bin/bash -c "jq --arg password \"$DB_PASSWORD\" --arg keycloak_tokenPassword \"$KEYCLOAK_TOKEN_PASSWORD\" \
+    '.password |= \$password | .keycloak_tokenPassword |= \$keycloak_tokenPassword' \
+    /usr/src/app/cypress/cypress.env.json > /tmp/temp.json && \
+    mv /tmp/temp.json /usr/src/app/cypress/cypress.env.json && \
+    cypress run"
+  register: run_container_detached_result
