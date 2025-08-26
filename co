@@ -1,3 +1,3 @@
-jq --arg password TEST --arg keycloak_tokenPassword TEST_2 \
+jq --arg password "$DB_PASSWORD" --arg keycloak_tokenPassword "$KEYCLOAK_TOKEN_PASSWORD" \
   '.password |= $password | .keycloak_tokenPassword |= $keycloak_tokenPassword' \
-  cypress.env.json > temp.json && mv temp.json cypress.env.jso
+  cypress.env.json > temp.json && mv temp.json cypress.env.json
