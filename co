@@ -1,6 +1,14 @@
- /bin/bash -c "jq --arg password \"$DB_PASSWORD\" --arg keycloak_tokenPassword \"$KEYCLOAK_TOKEN_PASSWORD\" \
-    '.password |= \$password | .keycloak_tokenPassword |= \$keycloak_tokenPassword' \
-    /usr/src/app/cypress/cypress.env.json > /tmp/temp.json && \
-    mv /tmp/temp.json /usr/src/app/cypress/cypress.env.json && \
-    cypress run"
+- name: Run Docker/Podman image in detached mode and get container ID
+  ansible.builtin.shell: |
+    podman run -d --name cypress-test-runner \
+    -e DB_PASSWORD="{{ HCEWSPLOCAL-DB-PASS }}" \
+    -e KEYCLOAK_TOKEN_PASSWORD="{{ B9802677-PASS }}" \
+    -v {{ full_docker_folder_path }}/cypress:/app/cypress \
+    {{ image_to_run_name }} \
+    /bin/bash -c " \
+      jq --arg password \"$DB_PASSWORD\" --arg keycloak_tokenPassword \"$KEYCLOAK_TOKEN_PASSWORD\" \
+      '.password = \$password | .keycloak_tokenPassword = \$keycloak_tokenPassword' \
+      /app/cypress/cypress.env.json > /tmp/temp.json && \
+      mv /tmp/temp.json /app/cypress/cypress.env.json && \
+      cypress run"
   register: run_container_detached_result
