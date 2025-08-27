@@ -1,35 +1,38 @@
 - name: Run Docker/Podman image in detached mode and get container ID
-  ansible.builtin.shell:
-    cmd: |
-      container_id=$(podman run -d \
-        -e DB_PASSWORD="${DB_PASSWORD}" \
-        -e KEYCLOAK_TOKEN_PASSWORD="${KEYCLOAK_TOKEN_PASSWORD}" \
-        "${image_to_run_name}" /bin/bash -c " \
-        jq --arg password \"${DB_PASSWORD}\" --arg keycloak_tokenPassword \"${KEYCLOAK_TOKEN_PASSWORD}\" \
-        '.password = \"\$password\" | .keycloak_tokenPassword = \"\$keycloak_tokenPassword\"' \
-        /e2e/cypress.env.json > /tmp/temp.json && \
-        mv /tmp/temp.json /e2e/cypress.env.json && \
-        cypress run --browser electron --headless --reporter mocha-junit-reporter" \
-      )
-      echo "$container_id"
+  ansible.builtin.command:
+    argv:
+      - podman
+      - run
+      - -d
+      - -e
+      - "DB_PASSWORD={{ DB_PASSWORD }}"
+      - -e
+      - "KEYCLOAK_TOKEN_PASSWORD={{ KEYCLOAK_TOKEN_PASSWORD }}"
+      - "{{ image_to_run_name }}"
+      - /bin/bash
+      - -c
+      - |
+        jq --arg password "${DB_PASSWORD}" --arg keycloak_tokenPassword "${KEYCLOAK_TOKEN_PASSWORD}" '.password = "\$password" | .keycloak_tokenPassword = "\$keycloak_tokenPassword"' /e2e/cypress.env.json > /tmp/temp.json && mv /tmp/temp.json /e2e/cypress.env.json && cypress run --browser electron --headless --reporter mocha-junit-reporter
+
   register: run_container_detached_result
 
-# Krok 2: Oglądanie logów w czasie rzeczywistym i oczekiwanie na zakończenie
-- name: Watch container logs
-  ansible.builtin.shell:
-    cmd: "podman logs -f --tail all {{ run_container_detached_result.stdout }}"
-  register: container_logs
-  ignore_errors: true
+- name: Wait for the container to complete its task
+  ansible.builtin.command:
+    cmd: "podman wait {{ run_container_detached_result.stdout }}"
 
-# Krok 3: Weryfikacja kodu wyjścia kontenera
-- name: Check for successful test run
-  ansible.builtin.shell:
+- name: Check container exit code
+  ansible.builtin.command:
     cmd: "podman inspect --format='{{ .State.ExitCode }}' {{ run_container_detached_result.stdout }}"
   register: container_exit_code
-  failed_when: container_exit_code.stdout != '0'
 
-# Opcjonalny krok: Usunięcie kontenera po pomyślnym zakończeniu
-- name: Clean up container after a successful run
-  ansible.builtin.shell:
-    cmd: "podman rm {{ run_container_detached_result.stdout }}"
-  when: container_exit_code.stdout == '0'
+- name: Assert successful test run
+  ansible.builtin.assert:
+    that:
+      - container_exit_code.stdout | int == 0
+    fail_msg: "Test container exited with non-zero code. Check logs for details."
+
+- name: Watch container logs
+  ansible.builtin.command:
+    cmd: "podman logs {{ run_container_detached_result.stdout }}"
+  register: container_logs
+  ignore_errors: true
