@@ -1,8 +1,4 @@
 - name: Get container exit code
   ansible.builtin.command:
-    argv:
-      - podman
-      - inspect
-      - --format={{ .State.ExitCode }}
-      - "{{ run_container_detached_result.stdout }}"
+    cmd: "podman inspect --format='{{ .State.ExitCode }}' {{ run_container_detached_result.stdout }}"
   register: container_exit_code
