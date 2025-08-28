@@ -1,16 +1,3 @@
-- name: Run Docker/Podman image in detached mode and get container ID
+- name: Wait for the container to complete its task
   ansible.builtin.command:
-    argv:
-      - podman
-      - run
-      - -d
-      - -e
-      - "DB_PASSWORD={{ DB_PASSWORD }}"
-      - -e
-      - "KEYCLOAK_TOKEN_PASSWORD={{ KEYCLOAK_TOKEN_PASSWORD }}"
-      - "{{ image_to_run_name }}"
-      - /bin/bash
-      - -c
-      - |
-        jq '.password = env.DB_PASSWORD | .keycloak_tokenPassword = env.KEYCLOAK_TOKEN_PASSWORD' /e2e/cypress.env.json > /tmp/temp.json && mv /tmp/temp.json /e2e/cypress.env.json && cypress run --browser electron --headless --reporter mocha-junit-reporter
-  register: run_container_detached_result
+    cmd: "podman wait {{ run_container_detached_result.stdout }}"
