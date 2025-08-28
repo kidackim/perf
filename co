@@ -1,3 +1,5 @@
-- name: Wait for the container to complete its task
-  ansible.builtin.command:
-    cmd: "podman wait {{ run_container_detached_result.stdout }}"
+- name: Compress a folder into a ZIP file
+  community.general.archive:
+    path: /sciezka/do/raporty_testow/
+    dest: /sciezka/docelowa/raporty.zip
+    format: zip
