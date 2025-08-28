@@ -1,1 +1,16 @@
-      - 'jq --arg password "${DB_PASSWORD}" --arg keycloak_tokenPassword "${KEYCLOAK_TOKEN_PASSWORD}" ".password = \$password | .keycloak_tokenPassword = \$keycloak_tokenPassword" /e2e/cypress.env.json > /tmp/temp.json && mv /tmp/temp.json /e2e/cypress.env.json && cypress run --browser electron --headless --reporter mocha-junit-reporter'
+- name: Run Docker/Podman image in detached mode and get container ID
+  ansible.builtin.command:
+    argv:
+      - podman
+      - run
+      - -d
+      - -e
+      - "DB_PASSWORD={{ DB_PASSWORD }}"
+      - -e
+      - "KEYCLOAK_TOKEN_PASSWORD={{ KEYCLOAK_TOKEN_PASSWORD }}"
+      - "{{ image_to_run_name }}"
+      - /bin/bash
+      - -c
+      - |
+        jq '.password = env.DB_PASSWORD | .keycloak_tokenPassword = env.KEYCLOAK_TOKEN_PASSWORD' /e2e/cypress.env.json > /tmp/temp.json && mv /tmp/temp.json /e2e/cypress.env.json && cypress run --browser electron --headless --reporter mocha-junit-reporter
+  register: run_container_detached_result
