@@ -1,12 +1,8 @@
----
 - name: Get container exit code
   ansible.builtin.command:
-    cmd: "podman inspect --format='{{ .State.ExitCode }}' {{ run_container_detached_result.stdout }}"
+    argv:
+      - podman
+      - inspect
+      - --format={{ .State.ExitCode }}
+      - "{{ run_container_detached_result.stdout }}"
   register: container_exit_code
-
----
-- name: Copy results from container to remote host
-  ansible.builtin.shell:
-    cmd: "podman cp {{ run_container_detached_result.stdout }}:/app/results /app/results"
-  when: container_exit_code.stdout | int == 0
-  register: cp_full_target_result
