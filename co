@@ -1,4 +1,26 @@
-- name: Get container exit code
-  ansible.builtin.command:
-    cmd: "podman inspect --format='{{ .State.ExitCode }}' {{ run_container_detached_result.stdout }}"
-  register: container_exit_code
+- name: Pobierz i rozpakuj archiwum z raportami
+  block:
+    - name: Utwórz lokalny folder 'reports'
+      ansible.builtin.file:
+        path: ./reports
+        state: directory
+      delegate_to: localhost
+
+    - name: Pobierz archiwum z raportami z serwera
+      ansible.builtin.fetch:
+        src: "/app/results/api-test-results.zip"
+        dest: "./reports/api-test-results.zip"
+        flat: yes
+      
+    - name: Rozpakuj archiwum
+      ansible.builtin.unarchive:
+        src: "./reports/api-test-results.zip"
+        dest: "./reports/"
+        remote_src: no
+      delegate_to: localhost
+
+    - name: Usuń pobrane archiwum
+      ansible.builtin.file:
+        path: "./reports/api-test-results.zip"
+        state: absent
+      delegate_to: localhost
