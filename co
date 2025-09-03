@@ -1,38 +1,5 @@
-Plan rozwojowo szkoleniowy dla testerów w obecnym zespole, 
-
-Obszary technologiczne:
-
-Ten obszar powinien być rozwijany równolegle do nauki CI/CD. Ciągłe doskonalenie umiejętności z Cypress i Gatling zapewni, że jakość i zaawansowanie pisanych testów będą stale rosły.
-
-•  Zaawansowany Cypress i TypeScript
-Testy automatyczne z Cypress od podstaw (dlaTesterów.pl) - https://www.dlatesterow.pl/cypress-szkolenie-z-automatyzacji-testow/
-Automatyzacja testów Cypress - dla początkujących (Quality Island) - https://qualityisland.pl/automatyzacja-testow-cypress-dla-poczatkujacych/
-•  Zaawansowane Testy Wydajnościowe z Gatling
-Szkolenie: Wydajność aplikacji na platformie Java (Sages) - https://www.sages.pl/szkolenia/wydajnosc-aplikacji-na-platformie-java
-Testy wydajności z Gatlingiem (Bottega IT Minds) - http://bottega.com.pl/programy_szkolen_pdf/szkolenie-testy-gatling.pdf
-
-
-Krok 2 rozbudowanie procesu CI/CD
-
-Integracja z Ekosystemem Azure DevOps i Ansible
-Kluczowym krokiem jest rozpoczęcie praktycznych warsztatów z Dockera i Azure Pipelines, co pozwoli na szybkie wpięcie istniejących testów w proces CI/CD.
-
-•  Docker dla Testerów
-Docker od podstaw do zaawansowanych technik (Asseco Academy) - https://academy.asseco.pl/szkolenie/docker-od-podstaw-do-zaawansowanych-technik/
-Kurs Docker Masters (ze ścieżką QA) - https://www.dockermasters.pl/
-•  Azure DevOps Pipelines dla Testerów
-Create a build pipeline with Azure Pipelines (Microsoft Learn) - https://learn.microsoft.com/en-us/azure/devops/pipelines/create-first-pipeline
-CI/CD z Azure DevOps (Sages) - https://www.sages.pl/szkolenia/ci-cd-z-azure-devops
-•  Podstawy Ansible dla Zespołu QA
-Ansible for the Absolute Beginner - Hands-On - DevOps (Udemy) - https://www.udemy.com/course/ansible-for-the-absolute-beginner/
-Szkolenia Ansible w Polsce (NobleProg Polska) - https://www.nobleprog.pl/szkolenia-ansible
-
-
-
-Obszary rozwoju automatyzacji w kontekście doskonalenia procesu automatyzacji. 
-Architektura i Wzorce w Testach Automatycznych
-
-Architektura i Wzorce w Testach Automatycznych
-ISTQB® Inżynieria Automatyzacji Testów (Sii Polska) - https://sii.pl/szkolenia/oferta/istqb-poziom-zaawansowany-inzynier-automatyzacji-testowania/
-Egzamin "ISTQB® Test Automation Engineer - Advanced Level" (ITtraining) - https://edu.ittraining.pl/egzamin/ISTQB_Advanced_Level_Test_Automation_Engineer
-
+- name: Wait until the container has stopped (exited)
+  ansible.builtin.shell: |
+    docker container wait {{ container_id_result.stdout }}
+  register: wait_result
+  ignore_errors: true
