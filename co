@@ -1,26 +1,4 @@
-- name: Compress, fetch, and unarchive reports
-  block:
-    - name: Kompresuj folder z wynikami testów w plik ZIP na serwerze zdalnym
-      community.general.archive:
-        path: /app/results/
-        dest: /app/results/archive.zip
-        format: zip
-
-    - name: Pobierz wygenerowane archiwum ZIP z serwera zdalnego
-      ansible.builtin.fetch:
-        src: /app/results/archive.zip
-        dest: ./fetched_reports/
-        flat: yes
-
-    - name: Rozpakuj pobrane archiwum na maszynie lokalnej
-      ansible.builtin.unarchive:
-        src: ./fetched_reports/archive.zip
-        dest: ./fetched_reports/
-        remote_src: no
-      delegate_to: localhost
-
-    - name: Usuń archiwum z maszyny lokalnej
-      ansible.builtin.file:
-        path: ./fetched_reports/archive.zip
-        state: absent
-      delegate_to: localhost
+- name: Wait for the container to exit
+  ansible.builtin.shell:
+    cmd: "{{ docker_cmd }} wait {{ run_container_detached_result.stdout | trim }}"
+  register: wait_container_result
