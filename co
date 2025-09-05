@@ -1,5 +1,5 @@
-- name: Wait until the container has stopped (exited)
-  ansible.builtin.shell: |
-    docker container wait {{ container_id_result.stdout }}
-  register: wait_result
-  ignore_errors: true
+- name: Set pipeline variable with Ansible result
+  ansible.builtin.debug:
+    msg: "##vso[task.setvariable variable=DockerOutput] {{ run_container_detached_result.stdout }}"
+  delegate_to: localhost
+  run_once: true
