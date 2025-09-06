@@ -1,5 +1,5 @@
 - name: Set pipeline variable with Ansible result
-  ansible.builtin.debug:
-    msg: "##vso[task.setvariable variable=DockerOutput] {{ run_container_detached_result.stdout }}"
+  ansible.builtin.shell:
+    cmd: "echo \"##vso[task.setvariable variable=DockerOutput;]{{ run_container_detached_result.stdout }}\""
   delegate_to: localhost
   run_once: true
