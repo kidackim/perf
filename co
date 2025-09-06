@@ -1,57 +1,6 @@
-- name: Find XML test reports
-  ansible.builtin.find:
-    paths: "{{ playbook_dir }}/fetched_reports"
-    patterns: "*.xml"
-  register: test_xml_files
-
-- name: Generate email body from XML files
-  ansible.builtin.set_fact:
-    passed_tests: []
-    failed_tests: []
-  
-- name: Process each XML report
-  community.general.xml:
-    path: "{{ item.path }}"
-    xpath: /testsuite/testcase
-    content: element
-  loop: "{{ test_xml_files.files }}"
-  register: test_results
-
-- name: Build lists of passed and failed tests
-  ansible.builtin.set_fact:
-    passed_tests: "{{ passed_tests + [item.path.split('/')[-1] ~ ': ' ~ item.xml.testcase.name] }}"
-  when: item.xml.testcase.failure is not defined
-  loop: "{{ test_results.results }}"
-  
-- name: Build lists of passed and failed tests
-  ansible.builtin.set_fact:
-    failed_tests: "{{ failed_tests + [item.path.split('/')[-1] ~ ': ' ~ item.xml.testcase.name ~ ' - ' ~ item.xml.testcase.failure.message] }}"
-  when: item.xml.testcase.failure is defined
-  loop: "{{ test_results.results }}"
-
-- name: Send email with detailed test results
-  community.general.mail:
-    host: smtp-gate.ing-ad.pl
-    port: 25
-    from: AzureDevOps@ing.pl
-    to:
-      - "aleksander.lorenz@ing.pl"
-      # ...
-    subject: "CI/CD Docker Build Results"
-    body: |
-      Testy zakończone.
-      <br>
-      Przeszły:
-      <pre>
-      {% for test in passed_tests %}
-      - {{ test }}
-      {% endfor %}
-      </pre>
-      <br>
-      Zawiodły:
-      <pre>
-      {% for test in failed_tests %}
-      - {{ test }}
-      {% endfor %}
-      </pre>
-    subtype: html
+- script: |
+    # ... reszta Twojego skryptu
+    ansible-playbook scripts/send-test-results-mail.yml \
+    --extra-vars "docker_output=$(DockerOutput)" \
+    --extra-vars "junit_xml_path=$(System.DefaultWorkingDirectory)/playbooks/fetched_reports/report.xml"
+  displayName: Send Test Results by Mail
