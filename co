@@ -1,6 +1,10 @@
-- script: |
-    # ... reszta Twojego skryptu
-    ansible-playbook scripts/send-test-results-mail.yml \
-    --extra-vars "docker_output=$(DockerOutput)" \
-    --extra-vars "junit_xml_path=$(System.DefaultWorkingDirectory)/playbooks/fetched_reports/report.xml"
-  displayName: Send Test Results by Mail
+- name: Find all JUnit XML files
+  ansible.builtin.find:
+    paths: "{{ junit_xml_path }}"
+    patterns: "*.xml"
+  register: xml_files
+
+- name: Parse each XML file and set fact
+  ansible.builtin.set_fact:
+    test_results_data: >
+      {{ xml_files.files | map(attribute='path') | map('from_json') | list }}
