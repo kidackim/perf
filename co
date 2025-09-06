@@ -1,2 +1,7 @@
-    echo "test_summary: |" >> $EXTRA_VARS_FILE
-    echo "  $TEST_SUMMARY_CONTENT" >> $EXTRA_VARS_FILE
+ # Zapisz listę zdanych testów
+    echo "passed_tests_list: |" >> $EXTRA_VARS_FILE
+    echo "$PASSED_LIST" | sed 's/^/  /' >> $EXTRA_VARS_FILE
+
+    # Zapisz listę niezdanych testów
+    echo "failed_tests_list: |" >> $EXTRA_VARS_FILE
+    echo "$FAILED_LIST" | sed 's/^/  /' >> $EXTRA_VARS_FILE
