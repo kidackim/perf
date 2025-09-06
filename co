@@ -1,11 +1,19 @@
- <pre>
-      Testy, które przeszły:
-      {% for test in passed_tests %}
-      - {{ test }}
-      {% endfor %}
+    - name: Find all JUnit XML files
+      ansible.builtin.find:
+        paths: "{{ junit_xml_path }}"
+        patterns: "*.xml"
+      register: xml_files
 
-      Testy, które nie przeszły:
-      {% for test in failed_tests %}
-      - {{ test }}
-      {% endfor %}
-      </pre>
+    - name: Parse each XML file and set fact
+      ansible.builtin.set_fact:
+        test_results_data: "{{ xml_files.files | map(attribute='path') | map('from_json') | list }}"
+
+    - name: Extract passed test results from XML
+      ansible.builtin.set_fact:
+        passed_tests: "{{ passed_tests | default([]) + [item] }}"
+      loop: "{{ xml_files.files | map(attribute='content') | map('from_json') | json_query('testsuites.testsuite.testcase[?passed==`true`]') }}"
+
+    - name: Extract failed test results from XML
+      ansible.builtin.set_fact:
+        failed_tests: "{{ failed_tests | default([]) + [item] }}"
+      loop: "{{ xml_files.files | map(attribute='content') | map('from_json') | json_query('testsuites.testsuite.testcase[?failed==`true`]') }}"
