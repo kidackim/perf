@@ -1,14 +1,2 @@
-- name: Set consolidated output variable
-  ansible.builtin.set_fact:
-    test_output: >-
-      {% if run_container_detached_result.failed is defined and run_container_detached_result.failed %}
-      {{ run_container_detached_result.stderr }}
-      {% else %}
-      {{ run_container_detached_result.stdout }}
-      {% endif %}
-
-- name: Set pipeline variable with Ansible result
-  ansible.builtin.shell:
-    cmd: "echo \"##vso[task.setvariable variable=DockerOutput;]{{ test_output }}\""
-  delegate_to: localhost
-  run_once: true
+- script: echo "##[debug]Variable DockerOutput is: $(DockerOutput)"
+  displayName: Verify DockerOutput Variable
