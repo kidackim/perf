@@ -1,12 +1,2 @@
-# Poprawiona logika parsowania wyników za pomocą 'grep'
-    REPORTS_PATH="$(System.DefaultWorkingDirectory)/playbooks/fetched_reports"
-    
-    PASSED_LIST=$(grep '<testcase' $REPORTS_PATH/*.xml | grep -v '<failure' | sed -n 's/.*name="\([^"]*\)".*/ - \1/p' | sort -u)
-    FAILED_LIST=$(grep -B 1 '<failure' $REPORTS_PATH/*.xml | grep '<testcase' | sed -n 's/.*name="\([^"]*\)".*/ - \1/p' | sort -u)
-
-    # Ustawienie domyślnej wiadomości, jeśli listy są puste
-    if [ -z "$PASSED_LIST" ]; then PASSED_LIST="Brak testów zakończonych sukcesem."; fi
-    if [ -z "$FAILED_LIST" ]; then FAILED_LIST="Brak testów zakończonych porażką."; fi
-
-    # Budowanie finalnego bloku HTML
-    TEST_SUMMARY_CONTENT="<h4>✅ Passed Tests:</h4><pre>${PASSED_LIST}</pre><h4 style='color: red;'>❌ Failed Tests:</h4><pre>${FAILED_LIST}</pre>"
+    echo "test_summary: |" >> $EXTRA_VARS_FILE
+    echo "  $TEST_SUMMARY_CONTENT" >> $EXTRA_VARS_FILE
