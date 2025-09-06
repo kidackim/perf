@@ -1,11 +1,65 @@
-          <pre>
-          Testy, które przeszły:
-          {% for test in passed_tests %}
-          - {{ test.name }}
-          {% endfor %}
+- script: |
+    # --- Istniejąca logika do ustawiania statusu ---
+    if [ "$(Agent.JobStatus)" == "Succeeded" ]; then
+      STATUS="Success"
+      STATUS_COLOR="green"
+    elif [ "$(Agent.JobStatus)" == "Failed" ]; then
+      STATUS="Failure"
+      STATUS_COLOR="red"
+    else
+      STATUS="Warning"
+      STATUS_COLOR="orange"
+    fi
 
-          Testy, które nie przeszły:
-          {% for test in failed_tests %}
-          - {{ test.name }}
-          {% endfor %}
-          </pre>
+    # --- NOWA LOGIKA: Parsowanie wyników testów XML ---
+    REPORTS_PATH="$(System.DefaultWorkingDirectory)/playbooks/fetched_reports"
+    
+    # Przygotowanie zmiennych na listy testów
+    PASSED_TESTS=""
+    FAILED_TESTS=""
+
+    # Pętla przez wszystkie pliki XML w katalogu
+    for file in $REPORTS_PATH/*.xml; do
+      if [ -f "$file" ]; then
+        # Znajdź testy, które nie mają tagu <failure> ani <error> - czyli przeszły
+        PASSED_TESTS+=$(xmllint --xpath '//testcase[not(failure) and not(error)]/@name' "$file" | sed 's/ name=/ - /g')
+        
+        # Znajdź testy, które mają tag <failure> - czyli nie przeszły
+        FAILED_TESTS+=$(xmllint --xpath '//testcase[failure]/@name' "$file" | sed 's/ name=/ - /g')
+      fi
+    done
+
+    # Budowanie finalnego bloku tekstu do maila
+    TEST_SUMMARY_CONTENT=""
+    if [ -n "$PASSED_TESTS" ]; then
+      TEST_SUMMARY_CONTENT+="<h4>✅ Passed Tests:</h4><pre>"
+      TEST_SUMMARY_CONTENT+="$PASSED_TESTS"
+      TEST_SUMMARY_CONTENT+="</pre>"
+    fi
+
+    if [ -n "$FAILED_TESTS" ]; then
+      TEST_SUMMARY_CONTENT+="<h4 style='color: red;'>❌ Failed Tests:</h4><pre>"
+      TEST_SUMMARY_CONTENT+="$FAILED_TESTS"
+      TEST_SUMMARY_CONTENT+="</pre>"
+    fi
+
+    # Zapisywanie zmiennych do pliku dla Ansible
+    EXTRA_VARS_FILE="ansible-vars.yml"
+    echo "---" > $EXTRA_VARS_FILE
+    echo "status: '$STATUS'" >> $EXTRA_VARS_FILE
+    echo "status_color: '$STATUS_COLOR'" >> $EXTRA_VARS_FILE
+    echo "build: '$(Build.BuildNumber)'" >> $EXTRA_VARS_FILE
+    echo "project_url: 'https://dev.azure.com/ingfurcdasaz1/IngOne/_build/results?buildId=$(Build.BuildId)'" >> $EXTRA_VARS_FILE
+    echo "junit_xml_path: '$(System.DefaultWorkingDirectory)/playbooks/fetched_reports/'" >> $EXTRA_VARS_FILE
+    # Dodajemy nową zmienną z podsumowaniem testów
+    echo "test_summary: |" >> $EXTRA_VARS_FILE
+    echo "  $TEST_SUMMARY_CONTENT" >> $EXTRA_VARS_FILE
+
+
+    # --- Istniejąca logika do uruchamiania Ansible ---
+    cd playbooks
+    ansible-playbook "scripts/send-test-results-mail.yml" \
+      -e "@../$EXTRA_VARS_FILE"
+
+  displayName: 'Send Test Results by Mail'
+  condition: always()
