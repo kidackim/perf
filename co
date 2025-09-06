@@ -1,13 +1,11 @@
-- name: Extract test results from XML
-  ansible.builtin.set_fact:
-    passed_tests: "{{ passed_tests | default([]) + [ item.testcase ] }}"
-  loop: "{{ xml_files.files | map('content') | map('from_json') | json_query('[].testsuites[].testsuite[].testcase[]') | selectattr('status', 'equalto', 'passed') | list }}"
-  vars:
-    passed_tests: []
+ <pre>
+      Testy, które przeszły:
+      {% for test in passed_tests %}
+      - {{ test }}
+      {% endfor %}
 
-- name: Extract failed test results from XML
-  ansible.builtin.set_fact:
-    failed_tests: "{{ failed_tests | default([]) + [ item.testcase ] }}"
-  loop: "{{ xml_files.files | map('content') | map('from_json') | json_query('[].testsuites[].testsuite[].testcase[]') | selectattr('status', 'equalto', 'failed') | list }}"
-  vars:
-    failed_tests: []
+      Testy, które nie przeszły:
+      {% for test in failed_tests %}
+      - {{ test }}
+      {% endfor %}
+      </pre>
