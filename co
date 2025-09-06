@@ -1,7 +1,5 @@
- # Zapisz listę zdanych testów
-    echo "passed_tests_list: |" >> $EXTRA_VARS_FILE
-    echo "$PASSED_LIST" | sed 's/^/  /' >> $EXTRA_VARS_FILE
+     <h4>✅ Passed Tests:</h4>
+              <pre>{{ passed_tests_list }}</pre>
 
-    # Zapisz listę niezdanych testów
-    echo "failed_tests_list: |" >> $EXTRA_VARS_FILE
-    echo "$FAILED_LIST" | sed 's/^/  /' >> $EXTRA_VARS_FILE
+              <h4 style='color: red;'>❌ Failed Tests:</h4>
+              <pre>{{ failed_tests_list }}</pre>
