@@ -1,50 +1,21 @@
-- script: |
-    # Logika statusu (bez zmian)
-    if [ "$(Agent.JobStatus)" == "Succeeded" ]; then
-      STATUS="Success"
-      STATUS_COLOR="green"
-    elif [ "$(Agent.JobStatus)" == "Failed" ]; then
-      STATUS="Failure"
-      STATUS_COLOR="red"
-    else
-      STATUS="Warning"
-      STATUS_COLOR="orange"
-    fi
-
-    # --- UPROSZCZONA LOGIKA PARSOWANIA ---
-    # Szukamy już TYLKO testów, które nie przeszły
+  # --- NOWA, NIEZAWODNA LOGIKA PARSOWANIA Z XMLSTARLET ---
     REPORTS_PATH="$(System.DefaultWorkingDirectory)/playbooks/fetched_reports"
     FAILED_LIST_WITH_REASON=""
 
     for file in $REPORTS_PATH/*.xml; do
       if [ -f "$file" ]; then
-        awk '/<testcase/,/<\/testcase>/ { if ($0 ~ /<failure/) { print $0 } }' "$file" | \
-        while IFS= read -r line; do
-          test_name=$(echo "$line" | sed -n 's/.*name="\([^"]*\)".*/\1/p')
-          failure_message=$(echo "$line" | sed -n 's/.*<failure message="\([^"]*\)".*/\1/p')
-          FAILED_LIST_WITH_REASON+="- ${test_name}\n  └─ Powód: ${failure_message}\n"
-        done
+        # xmlstarlet "rozumie" strukturę XML i wyciąga dane niezależnie od formatowania
+        FAILED_LIST_WITH_REASON+=$(xmlstarlet sel \
+          -t -m "//testcase[failure]" \
+          -o "- " -v "@name" -n \
+          -o "  └─ Powód: " -v "failure/@message" -n \
+          "$file")
       fi
     done
 
     # Ustawienie domyślnej wiadomości, jeśli nie ma błędów
     if [ -z "$FAILED_LIST_WITH_REASON" ]; then FAILED_LIST_WITH_REASON="Brak testów zakończonych porażką."; fi
 
-    # --- Zapisywanie zmiennych do pliku (teraz tylko z listą błędów) ---
-    EXTRA_VARS_FILE="ansible-vars.yml"
-    echo "---" > $EXTRA_VARS_FILE
-    echo "status: '$STATUS'" >> $EXTRA_VARS_FILE
-    echo "status_color: '$STATUS_COLOR'" >> $EXTRA_VARS_FILE
-    echo "build: '$(Build.BuildNumber)'" >> $EXTRA_VARS_FILE
-    echo "project_url: 'https://dev.azure.com/ingfurcdasaz1/IngOne/_build/results?buildId=$(Build.BuildId)'" >> $EXTRA_VARS_FILE
-    
-    echo "failed_tests_list: |" >> $EXTRA_VARS_FILE
-    echo -e "$FAILED_LIST_WITH_REASON" | sed 's/^/  /' >> $EXTRA_VARS_FILE
-
-    # Uruchamianie Ansible (bez zmian)
-    cd playbooks
-    ansible-playbook "scripts/send-test-results-mail.yml" \
-      -e "@../$EXTRA_VARS_FILE"
-
-  displayName: 'Send Test Results by Mail'
-  condition: always()
+ echo "failed_tests_list: |" >> $EXTRA_VARS_FILE
+    # Użycie printf jest bezpieczniejsze dla potencjalnych specjalnych znaków w nazwach testów
+    printf '%s\n' "$FAILED_LIST_WITH_REASON" | sed 's/^/  /' >> $EXTRA_VARS_FILE
