@@ -1,5 +1,62 @@
-     <h4>✅ Passed Tests:</h4>
-              <pre>{{ passed_tests_list }}</pre>
+- script: |
+    # Logika statusu (bez zmian)
+    if [ "$(Agent.JobStatus)" == "Succeeded" ]; then
+      STATUS="Success"
+      STATUS_COLOR="green"
+    elif [ "$(Agent.JobStatus)" == "Failed" ]; then
+      STATUS="Failure"
+      STATUS_COLOR="red"
+    else
+      STATUS="Warning"
+      STATUS_COLOR="orange"
+    fi
 
-              <h4 style='color: red;'>❌ Failed Tests:</h4>
-              <pre>{{ failed_tests_list }}</pre>
+    # --- NOWA, BARDZIEJ ZAAWANSOWANA LOGIKA PARSOWANIA ---
+    REPORTS_PATH="$(System.DefaultWorkingDirectory)/playbooks/fetched_reports"
+    
+    # Lista testów, które przeszły (bez zmian)
+    PASSED_LIST=$(grep '<testcase' $REPORTS_PATH/*.xml | grep -v '<failure' | sed -n 's/.*name="\([^"]*\)".*/- \1/p' | sort -u)
+
+    # Nowa logika do wyciągania testów, które nie przeszły, WRAZ Z POWODEM
+    FAILED_LIST_WITH_REASON=""
+    # Znajdź wszystkie bloki od <testcase> do </testcase> które zawierają <failure>
+    for file in $REPORTS_PATH/*.xml; do
+      if [ -f "$file" ]; then
+        # Używamy 'awk' do przetworzenia bloków <testcase> zawierających błędy
+        awk '/<testcase/,/<\/testcase>/ { if ($0 ~ /<failure/) { print $0 } }' "$file" | \
+        while IFS= read -r line; do
+          # Wyciągnij nazwę testu
+          test_name=$(echo "$line" | sed -n 's/.*name="\([^"]*\)".*/\1/p')
+          # Wyciągnij wiadomość o błędzie
+          failure_message=$(echo "$line" | sed -n 's/.*<failure message="\([^"]*\)".*/\1/p')
+          # Zbuduj sformatowaną linię
+          FAILED_LIST_WITH_REASON+="- ${test_name}\n  └─ Powód: ${failure_message}\n"
+        done
+      fi
+    done
+
+    # Ustawienie domyślnej wiadomości
+    if [ -z "$PASSED_LIST" ]; then PASSED_LIST="Brak testów zakończonych sukcesem."; fi
+    if [ -z "$FAILED_LIST_WITH_REASON" ]; then FAILED_LIST_WITH_REASON="Brak testów zakończonych porażką."; fi
+
+    # --- Zapisywanie zmiennych do pliku (bez zmian w logice, ale inne nazwy zmiennych) ---
+    EXTRA_VARS_FILE="ansible-vars.yml"
+    echo "---" > $EXTRA_VARS_FILE
+    echo "status: '$STATUS'" >> $EXTRA_VARS_FILE
+    echo "status_color: '$STATUS_COLOR'" >> $EXTRA_VARS_FILE
+    echo "build: '$(Build.BuildNumber)'" >> $EXTRA_VARS_FILE
+    echo "project_url: 'https://dev.azure.com/ingfurcdasaz1/IngOne/_build/results?buildId=$(Build.BuildId)'" >> $EXTRA_VARS_FILE
+    
+    echo "passed_tests_list: |" >> $EXTRA_VARS_FILE
+    echo "$PASSED_LIST" | sed 's/^/  /' >> $EXTRA_VARS_FILE
+
+    echo "failed_tests_list: |" >> $EXTRA_VARS_FILE
+    echo -e "$FAILED_LIST_WITH_REASON" | sed 's/^/  /' >> $EXTRA_VARS_FILE # Używamy -e dla interpretacji \n
+
+    # Uruchamianie Ansible (bez zmian)
+    cd playbooks
+    ansible-playbook "scripts/send-test-results-mail.yml" \
+      -e "@../$EXTRA_VARS_FILE"
+
+  displayName: 'Send Test Results by Mail'
+  condition: always()
