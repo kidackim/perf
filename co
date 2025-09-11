@@ -1,13 +1,2 @@
-  <p><strong>Failed Tests:</strong></p>
-          <table>
-            <thead>
-              <tr>
-                <th>Nazwa Testu</th>
-                <th>Powód Błędu</th>
-              </tr>
-            </thead>
-            <tbody>
-              {{ failed_tests_list }}
-            </tbody>
-          </table>
-      
+    REPORTS_PATH="$(System.DefaultWorkingDirectory)/playbooks/fetched_reports"
+    FAILED_LIST_WITH_REASON=""
