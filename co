@@ -1,8 +1,16 @@
-<div class="summary">
-        <p><strong>Projekt:</strong> Cypress MCE API Tests</p>
-        <p><strong>Build ID:</strong> {{ build }}</p>
-        <p><strong>Link do pełnych wyników:</strong><a href="{{ project_url }}">Przejdź do Azure DevOps</a></p>
+ if [ -n "$FAILED_BLOCKS" ]; then
+      while IFS= read -r line; do
+        # Wyciągnij nazwę testu z atrybutu 'name'
+        TESTCASE_NAME=$(echo "$line" | sed -n 's/.*name="\([^"]*\)".*/\1/p')
         
-        <p><strong>Failed Tests:</strong></p>
-        <pre style="background-color:#f1f1f1; padding:10px; border-radius:5px; white-space: pre-wrap; word-wrap: break-word;">{{ failed_tests_list }}</pre>
-      </div>
+        # Wyciągnij powód błędu z atrybutu 'message'
+        FAILURE_REASON=$(echo "$line" | sed -n 's/.*message="\([^"]*\)".*/\1/p')
+
+        # Zbuduj sformatowany tekst
+        FAILED_LIST_WITH_REASON+="Testcase: $TESTCASE_NAME\n  Powód: $FAILURE_REASON\n\n"
+      done <<< "$FAILED_BLOCKS"
+    fi
+
+    if [ -z "$FAILED_LIST_WITH_REASON" ]; then
+        FAILED_LIST_WITH_REASON="Brak testów zakończonych porażką."
+    fi
