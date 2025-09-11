@@ -1,18 +1,26 @@
-  # Przetwarzamy wszystkie pliki XML za pomocą awk, aby znaleźć błędy
-    FAILED_LIST_WITH_REASON=$(awk '
+  FAILED_LIST_WITH_REASON=$(awk '
       # Kiedy znajdujemy linię z "testcase name", zapisujemy tę nazwę do zmiennej w awk
       /testcase name=/ { 
         match($0, /name="([^"]*)"/, a); 
         testcase_name = a[1];
       }
-      # Kiedy znajdujemy linię z "failure message", drukujemy zapamiętaną nazwę testu i powód błędu
+      # Kiedy znajdujemy linię z "failure message", drukujemy cały wiersz tabeli
       /failure message=/ { 
         match($0, /message="([^"]*)"/, a); 
         failure_message = a[1];
-        printf "Testcase: %s\n Powód: %s\n\n", testcase_name, failure_message;
+        
+        # Zamiana znaków specjalnych HTML, aby uniknąć problemów z wyświetlaniem
+        gsub(/&/, "\\&amp;", failure_message);
+        gsub(/</, "\\&lt;", failure_message);
+        gsub(/>/, "\\&gt;", failure_message);
+        gsub(/"/, "\\&quot;", failure_message);
+        gsub(/\047/, "\\&apos;", failure_message);
+
+        # Drukujemy wiersz tabeli
+        printf "<tr><td style=\"padding: 8px; border: 1px solid #ddd;\">%s</td><td style=\"padding: 8px; border: 1px solid #ddd; color: #D8000C;\">%s</td></tr>", testcase_name, failure_message;
       }' $REPORTS_PATH/*.xml)
 
-    # Sprawdzamy, czy lista błędów jest pusta i wstawiamy odpowiedni komunikat
+    # Sprawdzamy, czy lista błędów jest pusta
     if [ -z "$FAILED_LIST_WITH_REASON" ]; then
-      FAILED_LIST_WITH_REASON="Brak testów zakończonych porażką."
+      FAILED_LIST_WITH_REASON="<tr><td colspan=\"2\" style=\"padding: 8px; border: 1px solid #ddd; text-align: center;\">Brak testów zakończonych porażką. ✅</td></tr>"
     fi
