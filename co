@@ -1,21 +1,8 @@
-  # --- NOWA, NIEZAWODNA LOGIKA PARSOWANIA Z XMLSTARLET ---
-    REPORTS_PATH="$(System.DefaultWorkingDirectory)/playbooks/fetched_reports"
-    FAILED_LIST_WITH_REASON=""
-
-    for file in $REPORTS_PATH/*.xml; do
-      if [ -f "$file" ]; then
-        # xmlstarlet "rozumie" strukturę XML i wyciąga dane niezależnie od formatowania
-        FAILED_LIST_WITH_REASON+=$(xmlstarlet sel \
-          -t -m "//testcase[failure]" \
-          -o "- " -v "@name" -n \
-          -o "  └─ Powód: " -v "failure/@message" -n \
-          "$file")
-      fi
-    done
-
-    # Ustawienie domyślnej wiadomości, jeśli nie ma błędów
-    if [ -z "$FAILED_LIST_WITH_REASON" ]; then FAILED_LIST_WITH_REASON="Brak testów zakończonych porażką."; fi
-
- echo "failed_tests_list: |" >> $EXTRA_VARS_FILE
-    # Użycie printf jest bezpieczniejsze dla potencjalnych specjalnych znaków w nazwach testów
-    printf '%s\n' "$FAILED_LIST_WITH_REASON" | sed 's/^/  /' >> $EXTRA_VARS_FILE
+<div class="summary">
+        <p><strong>Projekt:</strong> Cypress MCE API Tests</p>
+        <p><strong>Build ID:</strong> {{ build }}</p>
+        <p><strong>Link do pełnych wyników:</strong><a href="{{ project_url }}">Przejdź do Azure DevOps</a></p>
+        
+        <p><strong>Failed Tests:</strong></p>
+        <pre style="background-color:#f1f1f1; padding:10px; border-radius:5px; white-space: pre-wrap; word-wrap: break-word;">{{ failed_tests_list }}</pre>
+      </div>
