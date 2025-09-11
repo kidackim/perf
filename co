@@ -1,16 +1,18 @@
- if [ -n "$FAILED_BLOCKS" ]; then
-      while IFS= read -r line; do
-        # Wyciągnij nazwę testu z atrybutu 'name'
-        TESTCASE_NAME=$(echo "$line" | sed -n 's/.*name="\([^"]*\)".*/\1/p')
-        
-        # Wyciągnij powód błędu z atrybutu 'message'
-        FAILURE_REASON=$(echo "$line" | sed -n 's/.*message="\([^"]*\)".*/\1/p')
+  # Przetwarzamy wszystkie pliki XML za pomocą awk, aby znaleźć błędy
+    FAILED_LIST_WITH_REASON=$(awk '
+      # Kiedy znajdujemy linię z "testcase name", zapisujemy tę nazwę do zmiennej w awk
+      /testcase name=/ { 
+        match($0, /name="([^"]*)"/, a); 
+        testcase_name = a[1];
+      }
+      # Kiedy znajdujemy linię z "failure message", drukujemy zapamiętaną nazwę testu i powód błędu
+      /failure message=/ { 
+        match($0, /message="([^"]*)"/, a); 
+        failure_message = a[1];
+        printf "Testcase: %s\n Powód: %s\n\n", testcase_name, failure_message;
+      }' $REPORTS_PATH/*.xml)
 
-        # Zbuduj sformatowany tekst
-        FAILED_LIST_WITH_REASON+="Testcase: $TESTCASE_NAME\n  Powód: $FAILURE_REASON\n\n"
-      done <<< "$FAILED_BLOCKS"
-    fi
-
+    # Sprawdzamy, czy lista błędów jest pusta i wstawiamy odpowiedni komunikat
     if [ -z "$FAILED_LIST_WITH_REASON" ]; then
-        FAILED_LIST_WITH_REASON="Brak testów zakończonych porażką."
+      FAILED_LIST_WITH_REASON="Brak testów zakończonych porażką."
     fi
