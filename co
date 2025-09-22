@@ -1,35 +1,9 @@
-# ++++++++++++++ NOWY, ULEPSZONY SKRYPT AWK ++++++++++++++
-FAILED_LIST_WITH_REASON=$(awk '
-# Kiedy znajdujemy </testcase>, kończymy przetwarzanie danego bloku testu
-/<\/testcase>/ {
-  # Jeśli znaleźliśmy powód błędu dla tego testu, drukujemy go
-  if (reason != "") {
-    printf "Testcase: %s\n Powód: %s\n\n", testcase_name, reason;
-  }
-  # Resetujemy zmienne, aby być gotowym na następny test
-  testcase_name="";
-  reason="";
-}
-
-# Kiedy znajdujemy <testcase>, zapisujemy jego nazwę
-/testcase name=/ {
-  match($0, /name="([^"]*)"/, a);
-  testcase_name = a[1];
-}
-
-# Kiedy znajdujemy <failure message...>, zapisujemy powód błędu
-/failure message=/ {
-  match($0, /message="([^"]*)"/, a);
-  reason = a[1];
-}
-
-# Kiedy znajdujemy <![CDATA[...]]> I NIE MAMY jeszcze powodu z atrybutu "message",
-# traktujemy zawartość CDATA jako główny powód błędu.
-/CDATA/ && reason == "" {
-  reason = $0;
-  # Czyścimy linię z niepotrzebnych znaczników i białych znaków
-  sub(/.*\[CDATA\[/, "", reason);
-  sub(/\]\].*/, "", reason);
-  gsub(/^[ \t]+|[ \t]+$/, "", reason);
-}
-' $REPORTS_PATH/*.xml)
+- name: Clean up and remove results and target directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  with_items:
+    - "{{ base_docker_path }}/results"
+    - "{{ base_docker_path }}/target"
+  tags:
+    - cleanup
