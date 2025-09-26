@@ -1,9 +1,20 @@
-- name: Clean up and remove results and target directories
-  ansible.builtin.file:
-    path: "{{ item }}"
-    state: absent
-  with_items:
-    - "{{ base_docker_path }}/results"
-    - "{{ base_docker_path }}/target"
-  tags:
-    - cleanup
+Testy API dla /api/google/child/inapp/check (Weryfikacja Kwalifikacji)
+Ten endpoint weryfikuje, czy proces w ogóle może się rozpocząć.
+
+Identyfikator Testu	Scenariusz Biznesowy (Oczekiwany Wynik)	Wymagane Dane (Payload customer-info)
+P-CHECK-001	Sukces (Kwalifikacja OK) - Rodzic spełnia wszystkie warunki, karta dziecka jest aktywna.	Ważny sessionCode rodzica, authenticated: true, locale: "pl", dane karty dziecka w statusie AKTYWNY.
+N-CHECK-002	Błąd (Karta dziecka nieaktywna) - Karta dziecka została zablokowana przez rodzica.	Ważny sessionCode rodzica, dane karty w statusie ZABLOKOWANA.
+N-CHECK-003	Błąd (Brak numeru tel. do autoryzacji) - W profilu rodzica/klienta brakuje numeru telefonu wymaganego do SCA.	Ważny sessionCode rodzica, pole z numerem telefonu jest puste/nieprawidłowe w systemie banku (symulacja przez API).
+N-CHECK-004	Błąd (Wiek > 12 lat) - Dziecko jest za stare na tę usługę (np. 14 lat), co prowadzi do błędu kwalifikacji.	Ważny sessionCode rodzica, dane klienta-dziecka wskazują na wiek powyżej 12 lat (weryfikacja w systemie banku).
+N-CHECK-005	Błąd Techniczny - Nieważny format danych (np. locale w nieprawidłowym formacie, brakuje wymaganego pola sessionCode).	Niepoprawnie sformatowany JSON, brak wymaganego pola.
+
+
+Testy API dla /api/google/child/inapp/verify (Weryfikacja Tokenu/Digitalizacji)
+Ten endpoint jest krytyczny dla bezpieczeństwa i ukończenia procesu digitalizacji.
+
+Identyfikator Testu	Scenariusz Biznesowy (Oczekiwany Wynik)	Wymagane Dane (Payload customer-info)
+P-VER-001	Sukces (Poprawna Weryfikacja) - Poprawny ciąg znaków, system gotowy do finalizacji tokenizacji.	Ważny sessionCode, poprawny tokenUniqueReferenceId (ID procesu digitalizacji), który bank oczekuje.
+N-VER-002	Błąd (Brak Autoryzacji SCA) - Weryfikacja bez spełnienia warunków silnego uwierzytelnienia.	sessionCode poprawny, ale status konta lub sesji wskazuje na brak SCA (jeśli weryfikacja tego wymaga).
+N-VER-003	Błąd (Nieznany/Niepowiązany ID) - Przekazano ID tokenu, którego bank nie oczekuje/nie zna (np. z innej sesji lub wygenerowany przez oszusta).	Ważny sessionCode, ale losowy/nieprawidłowy tokenUniqueReferenceId.
+N-VER-004	Błąd (Limit Tokenów Przekroczony) - Próba dodania karty do kolejnego, nadmiarowego urządzenia (jak w sekcji "Ekran błędów" dokumentacji).	Ważny sessionCode, a system bankowy rejestruje, że klient przekroczył limit tokenów na karcie dziecka.
+N-VER-005	Błąd Logiki - Próba weryfikacji po tym, jak rodzic zablokował token (powinien zostać zablokowany, a nie weryfikowany).	Ważny sessionCode, ale karta jest już w statusie tokenu ZABLOKOWANY (w systemie banku).
