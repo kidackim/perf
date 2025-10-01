@@ -1,1 +1,6 @@
-@see {./santiago_commands_hce.js} 
+      "@santiago-commands": ["./cypress/support/santiago/santiago_commands_hce.js"]
+
+/ @ts-check
+/// <reference path="../../support/santiago/santiago_commands_hce.js" /> 
+// Dodatkowa informacja dla edytora o aliasie:
+/** @type {import("@santiago-commands")} */
