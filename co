@@ -1,6 +1,9 @@
-      "@santiago-commands": ["./cypress/support/santiago/santiago_commands_hce.js"]
+// W pliku: test-framework-hce.spec.cy.js
 
-/ @ts-check
-/// <reference path="../../support/santiago/santiago_commands_hce.js" /> 
-// Dodatkowa informacja dla edytora o aliasie:
-/** @type {import("@santiago-commands")} */
+/// <reference types="cypress" />
+// Metoda 1: Wskazanie na plik .d.ts
+/// <reference path="./santiago/TS commands.d.ts" /> 
+// Metoda 2: Wskazanie na plik implementacji (z którego VS Code wydobywa definicje)
+/// <reference path="./santiago/santiago_commands_hce.js" /> 
+
+// ... reszta kodu
