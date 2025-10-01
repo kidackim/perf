@@ -1,24 +1,24 @@
-const LOGIN_USER = '89002077';
-const LOGIN_PASS = 'BSHGQU9d7mCY1yNzH';
-const RENGWEB_URL = 'https://hce-u.pl.ing-ad/'; // Upewnij się, że to jest Twój poprawny BASE_URL
+// Plik: cypress/support/lolek_commands_hce.js
 
-Cypress.Commands.add('login', () => {
+const RENGWEB_URL = 'https://hce-u.pl.ing-ad/'; 
+
+Cypress.Commands.add('login', (username, password) => {
     return cy.api({
         method: 'POST',
         url: RENGWEB_URL + 'auth/realms/ING_MAIN/protocol/openid-connect/token',
         failOnStatusCode: false,
         body: {
             grant_type: 'password',
-            username: LOGIN_USER,
-            password: LOGIN_PASS
+            username: username,
+            password: password
         }
     });
 });
 
-Cypress.Commands.add('rengchildinappverify', (token, tokenUniqueReferenceID) => {
+Cypress.Commands.add('rengchildinappverify', (authToken, tokenUniqueReferenceId, token = 'kod128le') => {
     const VERIFY_PAYLOAD = {
-        token: 'kod128le',
-        tokenUniqueReferenceId: tokenUniqueReferenceID,
+        token: token,
+        tokenUniqueReferenceId: tokenUniqueReferenceId,
         locale: 'PL'
     };
     
@@ -26,25 +26,57 @@ Cypress.Commands.add('rengchildinappverify', (token, tokenUniqueReferenceID) => 
         method: 'POST',
         url: RENGWEB_URL + 'api/google/child/inapp/verify',
         failOnStatusCode: false,
-        headers: Utils.getHeadersWithSessionId(token), 
+        headers: Utils.getHeadersWithSessionId(authToken), 
         body: VERIFY_PAYLOAD
     });
 });
 
-Cypress.Commands.add('rengchildinappcheck', (token, sessionId, payload) => {
+Cypress.Commands.add('rengchildinappcheck', (authToken, payload, sessionId) => {
     return cy.api({
         method: 'POST',
         url: RENGWEB_URL + 'api/google/child/inapp/check',
         failOnStatusCode: false,
-        headers: Utils.getHeadersWithSessionId(sessionId, token),
+        headers: Utils.getHeadersWithSessionId(sessionId, authToken),
         body: payload
     });
 });
 
+// Plik: cypress/support/commands.d.ts
+
+declare namespace Cypress {
+    interface Chainable<Subject> {
+        /**
+         * Loguje użytkownika do systemu (auth/token).
+         * @param username - Nazwa użytkownika.
+         * @param password - Hasło użytkownika.
+         */
+        login(username: string, password: string): Chainable<any>;
+
+        /**
+         * Weryfikuje token zakupu (api/google/child/inapp/verify).
+         * @param authToken - Token uwierzytelniający.
+         * @param tokenUniqueReferenceId - ID referencyjne tokenu zakupu (np. DINGMC1PL...).
+         * @param [token='kod128le'] - Token zakupu.
+         */
+        rengchildinappverify(authToken: string, tokenUniqueReferenceId: string, token?: string): Chainable<any>;
+
+        /**
+         * Sprawdza uprawnienia (api/google/child/inapp/check).
+         * @param authToken - Token uwierzytelniający.
+         * @param payload - Całe ciało żądania (dane dziecka/rodzica).
+         * @param sessionId - ID sesji (jeśli wymagane w nagłówkach).
+         */
+        rengchildinappcheck(authToken: string, payload: object, sessionId: string): Chainable<any>;
+    }
+}
 
 
-let token;
-let sessionId;
+// Plik: cypress/e2e/test-framework-hce.spec.cy.js
+
+const TEST_USERNAME = '89002077';
+const TEST_PASSWORD = 'BSHGQU9d7mCY1yNzH';
+const EXPECTED_ELIGIBILITY_STATUS = 'ELIGIBLE'; 
+
 const GREEN_PATH_DATA = {
     "BEAP103125": {
         "card128id": "AAc8AACDED71191F37049555CAE6B60900AAF2CD683B566801E6CCD0105F6A6D8AC9A8BCDD7C95C950922A74CBC8B823B86EF8B5CA6ED68EF13785CC6E9AC8AB",
@@ -54,12 +86,15 @@ const GREEN_PATH_DATA = {
         "wkl_purpose_description": "parent for user for green path"
     }
 };
-const EXPECTED_ELIGIBILITY_STATUS = 'ELIGIBLE'; // Ustaw oczekiwany status
+
+let token;
+let sessionId;
 
 describe('API Setup and Authorization', () => {
 
     it('should successfully login and get token/session ID', () => {
-        cy.login().then((response) => {
+        // Użycie login(username, password)
+        cy.login(TEST_USERNAME, TEST_PASSWORD).then((response) => { 
             expect(response.status).to.eq(200);
             token = response.body.access_token; 
             sessionId = response.body.session_state; 
@@ -71,9 +106,10 @@ describe('API Setup and Authorization', () => {
 describe('Google Play Child API Verification & Check', () => {
 
     it('should pass inapp verification check for a valid token reference (Postman)', () => {
-        const TEST_TOKEN_REF = 'DINGMC1PL000000e4f2257997334bdbdbb232f45ec7caae7';
+        const VALID_TOKEN_REF = 'DINGMC1PL000000e4f2257997334bdbdbb232f45ec7caae7';
 
-        cy.rengchildinappverify(token, TEST_TOKEN_REF).then((response) => {
+        // Użycie rengchildinappverify(authToken, tokenRef)
+        cy.rengchildinappverify(token, VALID_TOKEN_REF).then((response) => {
             expect(response.status).to.eq(200);
             expect(response.body.status).to.eq('OK');
             expect(response.body.code).to.be.null;
@@ -82,7 +118,8 @@ describe('Google Play Child API Verification & Check', () => {
 
     it('should correctly process the "parent for user for green path" data (NEW TEST)', () => {
         
-        cy.rengchildinappcheck(token, sessionId, GREEN_PATH_DATA).then((response) => {
+        // Użycie rengchildinappcheck(authToken, payload, sessionId)
+        cy.rengchildinappcheck(token, GREEN_PATH_DATA, sessionId).then((response) => {
             const mainKey = Object.keys(response.body)[0];
 
             expect(response.status).to.eq(200);
@@ -94,6 +131,7 @@ describe('Google Play Child API Verification & Check', () => {
     it('should return an error for an invalid/non-existent tokenUniqueReferenceId (Negative)', () => {
         const INVALID_TOKEN_REF = 'INVALID_REF_12345'; 
 
+        // Użycie rengchildinappverify(authToken, invalidTokenRef)
         cy.rengchildinappverify(token, INVALID_TOKEN_REF).then((response) => {
             expect(response.status).to.eq(200); 
             expect(response.body.status).to.eq('ERROR');
