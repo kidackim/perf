@@ -1,1 +1,10 @@
-/// <reference types="../support/commands" /> 
+ "compilerOptions": {
+    "module": "CommonJS",
+    "target": "ES6",
+    "lib": ["es6", "dom"],
+    "allowJs": true,
+    "checkJs": true, // Włącza sprawdzanie typów dla JS
+    "baseUrl": ".",
+    "paths": {
+      "~/*": ["./cypress/*"] // Dodaje aliasy (opcjonalne, ale pomocne)
+    }
