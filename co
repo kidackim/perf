@@ -1,6 +1,14 @@
+// W pliku: santiago_commands_hce.js
+
+// 1. Dodaj deklarację interfejsu (w komentarzu JSDoc)
 /**
- * @module santiago_commands_hce
- * @exports login
- * @exports rengchildinappverify
- * * @see {./santiago_commands_hce.js}
+ * @typedef {Object} Chainable
+ * @property {function(string, string): Chainable} login Loguje użytkownika do systemu.
+ * @property {function(string, string): Chainable} rengchildinappverify Weryfikuje token zakupu.
+ */
+
+// 2. Dodaj deklarację modułu Cypressa, aby rozszerzyć typ
+/**
+ * @typedef {Cypress.Chainable} Cypress.Chainable
+ * @augments Chainable
  */
