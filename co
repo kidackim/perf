@@ -1,9 +1,6 @@
-// W pliku: test-framework-hce.spec.cy.js
-
-/// <reference types="cypress" />
-// Metoda 1: Wskazanie na plik .d.ts
-/// <reference path="./santiago/TS commands.d.ts" /> 
-// Metoda 2: Wskazanie na plik implementacji (z którego VS Code wydobywa definicje)
-/// <reference path="./santiago/santiago_commands_hce.js" /> 
-
-// ... reszta kodu
+/**
+         * Loguje użytkownika do systemu (auth/token).
+         * @param username - Nazwa użytkownika.
+         * @param password - Hasło użytkownika.
+         * @link {./santiago_commands_hce.js}
+         */
