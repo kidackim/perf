@@ -1,6 +1,6 @@
 /**
-         * Loguje użytkownika do systemu (auth/token).
-         * @param username - Nazwa użytkownika.
-         * @param password - Hasło użytkownika.
-         * @link {./santiago_commands_hce.js}
-         */
+ * @module santiago_commands_hce
+ * @exports login
+ * @exports rengchildinappverify
+ * * @see {./santiago_commands_hce.js}
+ */
