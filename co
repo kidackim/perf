@@ -1,5 +1,21 @@
+interface LoginResponse {
+    // 1. Główne Tokeny i Sesja
+    access_token: string;
+    refresh_token: string;
+    session_state: string;
+    
+    // 2. Wygasanie i Typ
+    expires_in: number;
+    refresh_expires_in: number;
+    token_type: string; // Zwykle "Bearer"
+    
+    // 3. Informacje dodatkowe
+    scope: string; // Pole z pustym stringiem, ale obecne
+    "not-before-policy": number; // Pole w cudzysłowach, ale jest widoczne jako 0
+}
+
 /**
  * @param {string} username
  * @param {string} password
- * @returns {Cypress.Chainable} // Jawnie deklarujemy, że to jest łańcuch Cypressa
+ * @returns {Cypress.Chainable<LoginResponse>} // Wymuszamy typ
  */
