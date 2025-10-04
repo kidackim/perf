@@ -1,1 +1,11 @@
-(response: ChainableResponse<LoginResponse>) => { 
+type MapToChainableResponse<T, ResponseType> = 
+    // Sprawdzamy, czy T jest funkcją (inferencja Args to jej argumenty)
+    T extends (...args: infer Args) => any
+    ? // Jeśli tak, zwracamy nowy typ funkcji:
+      (...args: Args) => Cypress.Chainable<Cypress.Response<ResponseType>>
+    : never;
+
+ login: MapToChainableResponse<
+            typeof import("./santiago_commands_hce").login, // Źródło argumentów
+            LoginResponse // Docelowy typ zwracanej odpowiedzi
+        >;
