@@ -1,12 +1,15 @@
-/ 2. Definicja Typu, który mapuje funkcje JS na Komendy Cypressa
+// 2. Definicja Komendy (funkcja, która zwraca Chainable<R>)
+// Ten typ wyodrębnia argumenty (Args) i typ zwracany (R) z funkcji JS
 type CommandFn<T extends unknown[], R> = (...args: T) => Cypress.Chainable<R>;
 
-// 3. Typ Narzędziowy, który wyodrębnia argumenty i typ zwracany z funkcji
-// Użyjemy go do każdej komendy z osobna!
-type MapLoginCommand = (
-    // Inferencja: Pobieramy typ argumentów funkcji 'login'
+
+// 3. Ostateczny Typ Mapujący dla Logowania
+// To jest typ, który będzie użyty w interfejsie Chainable
+type LoginCommandMap = (
+    // Inferencja: Sprawdź typ funkcji 'login' z pliku JS
     typeof import("./santiago_commands_hce").login extends CommandFn<infer Args, infer R> 
-    // Wynik: Używamy tych argumentów (Args) i typu zwracanego (R) do stworzenia nowej komendy Chainable
-    ? (...args: Args) => Cypress.Chainable<R>
+    // Wynik: Utwórz nową komendę, która ma te same argumenty (Args), 
+    // ale zawsze zwraca łańcuch z typem odpowiedzi (LoginResponse)
+    ? (...args: Args) => Cypress.Chainable<Cypress.Response<LoginResponse>>
     : never
 );
