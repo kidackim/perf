@@ -1,21 +1,36 @@
+// W pliku: TS commands.d.ts
+
+// 1. Zdefiniuj Interfejs Odpowiedzi API (LoginResponse)
 interface LoginResponse {
-    // 1. Główne Tokeny i Sesja
     access_token: string;
     refresh_token: string;
     session_state: string;
-    
-    // 2. Wygasanie i Typ
-    expires_in: number;
-    refresh_expires_in: number;
-    token_type: string; // Zwykle "Bearer"
-    
-    // 3. Informacje dodatkowe
-    scope: string; // Pole z pustym stringiem, ale obecne
-    "not-before-policy": number; // Pole w cudzysłowach, ale jest widoczne jako 0
+    // ... reszta pól
 }
 
-/**
- * @param {string} username
- * @param {string} password
- * @returns {Cypress.Chainable<LoginResponse>} // Wymuszamy typ
- */
+// 2. Utwórz Typ Modułu Implementacji (Klucz do rozwiązania konfliktu)
+// Ten kod mówi TypeScriptowi: Stwórz typ 'SantiagoCommands' z modułu implementacji.
+type SantiagoCommands = typeof import("./santiago_commands_hce");
+
+// 3. Rozszerzenie Interfejsu Globalnego (Chainable)
+declare global {
+    namespace Cypress {
+        interface Chainable {
+            // Wygodniejsze użycie: teraz odwołujemy się do typu modułu:
+            
+            /**
+             * @returns {Cypress.Chainable<LoginResponse>}
+             * @see {./santiago_commands_hce.js}
+             */
+            login: SantiagoCommands['login'];
+
+            /**
+             * @see {./santiago_commands_hce.js}
+             */
+            rengchildinappverify: SantiagoCommands['rengchildinappverify'];
+            
+            // ... i tak dalej dla innych komend
+
+        }
+    }
+}
