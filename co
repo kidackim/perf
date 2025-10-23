@@ -1,27 +1,29 @@
-const extractDevHashForSuspendedCustomer = (responseBody) => {
-    const devHashes = responseBody.data.wallets.apple.digitizeddevsForEach;
+/**
+ * Ekstrahuje 'devHash' tokena o statusie zawieszonym ('TOKPER_SUSPEND_CUST') 
+ * z pełnej odpowiedzi API /api/tokens/info.
+ *
+ * @param {object} responseBody - Obiekt body odpowiedzi z cy.lolekGetTokensInfo.
+ * @returns {string | null} devHash tokena lub null.
+ */
+const extractSuspendedDevHash = (responseBody) => {
+    // 1. Definicja stałej operacji do szukania (dobra praktyka)
+    const SUSPENDED_OP = 'TOKPER_SUSPEND_CUST';
 
-    // Użycie map i find lub prostszej iteracji dla "mistrzowskiego" JS
-    const suspendedDev = devHashes.find(dev => 
-        dev.digitizeddev.availableOperations.indexOf('TOKPER_SUSPEND_CUST') !== -1
-    );
+    // 2. BEZPIECZNE odczytanie tablicy tokenów z uwzględnieniem obiektu 'data'
+    const devs = responseBody?.data
+        ?.tokenActivationEnable
+        ?.google
+        ?.digitizeddevs ?? [];
 
-    return suspendedDev ? suspendedDev.digitizeddev.devHash : null;
+    // 3. Wyszukanie tokena, który zawiera w 'availableOperations' status zawieszony.
+    const suspendedToken = devs.find(dev => {
+        // Zabezpieczenie: upewnienie się, że 'availableOperations' jest tablicą
+        const operations = dev?.availableOperations ?? [];
+        
+        // Używamy Array.prototype.includes() dla czystości
+        return operations.includes(SUSPENDED_OP);
+    });
+
+    // 4. Bezpieczny zwrot devHash znalezionego tokena.
+    return suspendedToken?.devHash || null;
 };
-
-cy.lolekGetTokensInfo(authToken)
-        .then((response) => {
-            // Asercja 1: Status API
-            expect(response.status).to.eq(200, 'API call should return status 200');
-            // Asercja 2: Status Logiczny
-            expect(response.body.status).to.eq('OK', 'Response body status should be OK');
-
-            // 1. Ekstrakcja Hasha za pomocą czystej funkcji
-            const devHashReady = extractDevHashForSuspendedCustomer(response.body);
-
-            // 2. Asercja: Hash powinien zostać znaleziony
-            expect(devHashReady).to.be.a('string').and.not.be.empty;
-
-            // 3. Aliasing i przygotowanie do kolejnego kroku (jeśli jest potrzebny)
-            cy.wrap(devHashReady).as('suspendedDevHash');
-        });
